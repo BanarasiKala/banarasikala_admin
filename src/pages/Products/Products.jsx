@@ -326,6 +326,32 @@ export default function Products() {
 
 
 
+  const getUploadSignature = async (resourceType) => {
+    const token = localStorage.getItem("accessToken");
+    const res = await fetch(
+      `${API_ENDPOINTS.products}/upload-signature?resourceType=${resourceType}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) throw new Error("Failed to get upload signature");
+    return res.json();
+  };
+
+  const uploadToCloudinary = async (file, sigData) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("api_key", sigData.apiKey);
+    form.append("timestamp", String(sigData.timestamp));
+    form.append("signature", sigData.signature);
+    form.append("folder", sigData.folder);
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${sigData.cloudName}/${sigData.resourceType}/upload`,
+      { method: "POST", body: form }
+    );
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data?.error?.message || "Cloudinary upload failed");
+    return data.secure_url;
+  };
+
   const calculateDiscount = () => {
     const price = parseFloat(formData.selling_price);
     const old = parseFloat(formData.mrp_price);
@@ -370,63 +396,83 @@ export default function Products() {
     }
 
     const coverColorId = formData.cover_color_id || selectedColorIds[0];
-    const images = (formData.images || []).map((img, index) => ({
-      color_id: parseInt(img.color_id, 10),
-      url: img.url || img.image_url,
-      display_order: index,
-      is_cover: String(img.color_id) === String(coverColorId),
-    }));
 
-    const payloadData = {
-      ...formData,
-      slug: formData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
-      selling_price: parseFloat(formData.selling_price) || 0, 
-      mrp_price: formData.mrp_price ? parseFloat(formData.mrp_price) : null,
-      cost_price: formData.cost_price ? parseFloat(formData.cost_price) : null,
-      stock_quantity: parseInt(formData.stock_quantity) || 0,
-      low_stock_threshold: parseInt(formData.low_stock_threshold) || 0,
-      color_stocks: formData.color_stocks || {},
-      images,
-      cover_color_id: coverColorId,
-      material_id: formData.material_id || null,
-      variety_id: formData.variety_id || null, 
-      occasion_id: formData.occasion_id || null,
-      special_collection: Boolean(formData.special_collection),
-      payment_options: formData.payment_options || [],
-      service_options: formData.service_options || [],
-      care_instructions: formData.care_instructions || "",
-    };
-
-    const formPayload = new FormData();
-    formPayload.append("productData", JSON.stringify(payloadData));
-
-    Object.entries(newColorImageFiles).forEach(([colorId, files]) => {
-      (files || []).forEach((file) => {
-        formPayload.append(`color_${colorId}`, file);
-      });
-    });
-
-    Object.entries(newColorVideoFiles).forEach(([colorId, files]) => {
-      (files || []).forEach((file) => {
-        formPayload.append(`color_video_${colorId}`, file);
-      });
-    });
-
-    const payload = {
-      url: editingProduct
-        ? `${API_ENDPOINTS.products}/${editingProduct.id}/with-images`
-        : `${API_ENDPOINTS.products}/with-images`,
-      method: editingProduct ? "PUT" : "POST",
-    };
     try {
+      // Existing saved images
+      const allImages = (formData.images || []).map((img, index) => ({
+        color_id: parseInt(img.color_id, 10),
+        url: img.url || img.image_url,
+        display_order: index,
+        is_cover: String(img.color_id) === String(coverColorId),
+      }));
+
+      // Upload new images directly to Cloudinary (browser → Cloudinary, EC2 not involved)
+      const hasNewImages = Object.values(newColorImageFiles).some((files) => files.length > 0);
+      if (hasNewImages) {
+        const imgSig = await getUploadSignature("image");
+        const imageUploadTasks = [];
+        for (const [colorId, files] of Object.entries(newColorImageFiles)) {
+          for (const file of files) {
+            imageUploadTasks.push(
+              uploadToCloudinary(file, imgSig).then((url) => ({ color_id: parseInt(colorId, 10), url }))
+            );
+          }
+        }
+        const uploadedImages = await Promise.all(imageUploadTasks);
+        allImages.push(...uploadedImages);
+      }
+
+      // Existing saved videos
+      const allVideos = [...(formData.videos || [])];
+
+      // Upload new videos sequentially (each up to 60 MB)
+      const hasNewVideos = Object.values(newColorVideoFiles).some((files) => files.length > 0);
+      if (hasNewVideos) {
+        const vidSig = await getUploadSignature("video");
+        for (const [colorId, files] of Object.entries(newColorVideoFiles)) {
+          for (const file of files) {
+            const url = await uploadToCloudinary(file, vidSig);
+            allVideos.push({ color_id: parseInt(colorId, 10), url });
+          }
+        }
+      }
+
+      const payloadData = {
+        ...formData,
+        slug: formData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
+        selling_price: parseFloat(formData.selling_price) || 0,
+        mrp_price: formData.mrp_price ? parseFloat(formData.mrp_price) : null,
+        cost_price: formData.cost_price ? parseFloat(formData.cost_price) : null,
+        stock_quantity: parseInt(formData.stock_quantity) || 0,
+        low_stock_threshold: parseInt(formData.low_stock_threshold) || 0,
+        color_stocks: formData.color_stocks || {},
+        images: allImages,
+        videos: allVideos,
+        cover_color_id: coverColorId,
+        material_id: formData.material_id || null,
+        variety_id: formData.variety_id || null,
+        occasion_id: formData.occasion_id || null,
+        special_collection: Boolean(formData.special_collection),
+        payment_options: formData.payment_options || [],
+        service_options: formData.service_options || [],
+        care_instructions: formData.care_instructions || "",
+      };
+
       const token = localStorage.getItem("accessToken");
-      const res = await fetch(payload.url, { 
-        method: payload.method, 
+      const url = editingProduct
+        ? `${API_ENDPOINTS.products}/${editingProduct.id}/with-images`
+        : `${API_ENDPOINTS.products}/with-images`;
+      const method = editingProduct ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: {
-          'Authorization': `Bearer ${token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-        body: formPayload 
+        body: JSON.stringify(payloadData),
       });
+
       if (res.ok) {
         if (tableReady) {
           await fetchProducts(1, pageSize);
@@ -440,10 +486,11 @@ export default function Products() {
         showModal("error", "Save failed", err.message || "Unable to save product right now. Please check inputs and try again.");
       }
     } catch (err) {
-      console.error("Product save network error:", err);
-      showModal("error", "Network error", "Please check your connection and try again.");
+      console.error("Product save error:", err);
+      showModal("error", "Upload failed", "File upload failed. Please check your connection and try again.");
+    } finally {
+      setSubmitting(false);
     }
-    finally { setSubmitting(false); }
   };
 
   const handleDelete = async (id) => {

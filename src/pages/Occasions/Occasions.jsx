@@ -166,7 +166,7 @@ export default function Occasions() {
 
   const checkAndConfirmDelete = (occasion) => {
     // Check if occasion is linked to any products
-    const linkedProducts = products.filter((p) => p.occasion_id === occasion.id);
+    const linkedProducts = products.filter((p) => Array.isArray(p.occasion_ids) && p.occasion_ids.map(Number).includes(Number(occasion.id)));
 
     if (linkedProducts.length > 0) {
       const productNames = linkedProducts

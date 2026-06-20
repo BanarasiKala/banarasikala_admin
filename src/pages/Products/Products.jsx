@@ -11,7 +11,7 @@ const INITIAL_FORM_STATE = {
   images: [], videos: [], cover_color_id: "", stock_quantity: 0, low_stock_threshold: 5,
   color_stocks: {},
   weight: "", length: "6.5", width: "1.1", height: "5",
-  material_id: "", variety_id: "", occasion_id: "",
+  material_id: "", variety_id: "", occasion_ids: [],
   special_collection: false, is_new_arrival: false, status: "active",
   blouse_piece: true,
   payment_options: ["prepaid"],
@@ -173,6 +173,7 @@ export default function Products() {
         images: Array.isArray(product.images) ? product.images : [],
         videos: Array.isArray(product.videos) ? product.videos : [],
         cover_color_id: product.images?.find((img) => img.is_cover)?.color_id || "",
+        occasion_ids: Array.isArray(product.occasion_ids) ? product.occasion_ids.map(Number).filter(Boolean) : [],
       });
     } else { setEditingProduct(null); setFormData(INITIAL_FORM_STATE); }
     setNewColorImageFiles({});
@@ -183,6 +184,18 @@ export default function Products() {
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+  };
+
+  const handleOccasionToggle = (id) => {
+    setFormData((prev) => {
+      const current = Array.isArray(prev.occasion_ids) ? prev.occasion_ids : [];
+      return {
+        ...prev,
+        occasion_ids: current.includes(id)
+          ? current.filter((oid) => oid !== id)
+          : [...current, id],
+      };
+    });
   };
 
   const handleColorStockChange = (colorId, value) => {
@@ -451,7 +464,7 @@ export default function Products() {
         cover_color_id: coverColorId,
         material_id: formData.material_id || null,
         variety_id: formData.variety_id || null,
-        occasion_id: formData.occasion_id || null,
+        occasion_ids: Array.isArray(formData.occasion_ids) ? formData.occasion_ids.map(Number).filter(Boolean) : [],
         special_collection: Boolean(formData.special_collection),
         payment_options: formData.payment_options || [],
         service_options: formData.service_options || [],
@@ -717,6 +730,7 @@ export default function Products() {
         onClose={() => setIsModalOpen(false)}
         formData={formData}
         onInputChange={handleInputChange}
+        onOccasionToggle={handleOccasionToggle}
         onMultiSelectChange={handleMultiSelectChange}
         onColorStockChange={handleColorStockChange}
         onColorImageUpload={handleColorImageUpload}

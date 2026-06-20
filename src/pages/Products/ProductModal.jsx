@@ -8,6 +8,7 @@ const ProductModal = ({
   onClose,
   formData,
   onInputChange,
+  onOccasionToggle,
   onMultiSelectChange,
   onColorStockChange,
   onColorImageUpload,
@@ -478,13 +479,29 @@ const ProductModal = ({
                 </div>
 
                 <div>
-                  <label className={labelClasses(!isSelectionComplete)}>Recommended Occasion</label>
-                  <select name="occasion_id" value={formData.occasion_id} onChange={onInputChange} className={inputClasses(!isSelectionComplete)}>
-                    <option value="">Select Occasion</option>
-                    {occasions.map((occ) => (
-                      <option key={occ.id} value={occ.id}>{occ.name}</option>
-                    ))}
-                  </select>
+                  <label className={labelClasses(!isSelectionComplete)}>Occasions (select all that apply)</label>
+                  <div className={`rounded-lg border px-3 py-2 ${!isSelectionComplete ? "opacity-50 pointer-events-none border-gray-200 bg-gray-50" : "border-gray-300 bg-white"}`}>
+                    {occasions.length === 0 ? (
+                      <p className="text-xs text-gray-400 py-1">No occasions available</p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto">
+                        {occasions.map((occ) => {
+                          const checked = Array.isArray(formData.occasion_ids) && formData.occasion_ids.map(Number).includes(Number(occ.id));
+                          return (
+                            <label key={occ.id} className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-700">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => onOccasionToggle(Number(occ.id))}
+                                className="w-4 h-4 rounded text-[#800020] border-gray-300 focus:ring-[#800020]"
+                              />
+                              {occ.name}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-2xl border border-gray-200 shadow-inner">

@@ -129,6 +129,9 @@ export default function Fabrics() {
           const method = editingFabric ? "PUT" : "POST";
           const res = await fetch(url, {
             method,
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+            },
             body: payload,
           });
 
@@ -188,6 +191,9 @@ export default function Fabrics() {
         try {
           const res = await fetch(`${API_ENDPOINTS.materials}/${fabric.id}`, {
             method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+            },
           });
           if (res.ok) {
             await fetchData();

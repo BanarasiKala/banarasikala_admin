@@ -699,9 +699,9 @@ const ProductModal = ({
                       <button
                         type="button"
                         onClick={() => onRemoveKeyHighlight(index)}
-                        className="flex-shrink-0 flex items-center justify-center p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="flex-shrink-0 flex items-center justify-center w-8 h-8 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition-colors border border-red-200"
                       >
-                        <Minus className="w-3.5 h-3.5" />
+                        <Minus className="w-4 h-4" />
                       </button>
                     </div>
                   ))}

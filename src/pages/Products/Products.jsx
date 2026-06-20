@@ -307,9 +307,22 @@ export default function Products() {
     }));
   };
 
+  const VIDEO_MAX_BYTES = 100 * 1024 * 1024; // Cloudinary 100 MB limit
+
   const handleColorVideoUpload = (colorId, files) => {
     const incoming = Array.from(files || []);
     if (!incoming.length) return;
+
+    const oversized = incoming.filter((f) => f.size > VIDEO_MAX_BYTES);
+    if (oversized.length) {
+      showModal(
+        "warning",
+        "Video too large",
+        `${oversized.map((f) => f.name).join(", ")} exceed${oversized.length === 1 ? "s" : ""} the 100 MB limit. Please compress the video before uploading.`
+      );
+      return;
+    }
+
     setNewColorVideoFiles((prev) => {
       const existingNew = prev[colorId] || [];
       const existingSaved = (formData.videos || []).filter((v) => v.color_id === parseInt(colorId, 10));
@@ -396,8 +409,17 @@ export default function Products() {
       `https://api.cloudinary.com/v1_1/${sigData.cloudName}/${sigData.resourceType}/upload`,
       { method: "POST", body: form }
     );
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data?.error?.message || "Cloudinary upload failed");
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Cloudinary returned a non-JSON response (status ${res.status})`);
+    }
+    if (!res.ok || data.error) {
+      const msg = data?.error?.message || `Cloudinary error (status ${res.status})`;
+      console.error("[Cloudinary upload error]", data);
+      throw new Error(msg);
+    }
     return data.secure_url;
   };
 
@@ -474,7 +496,7 @@ export default function Products() {
       // Existing saved videos
       const allVideos = [...(formData.videos || [])];
 
-      // Upload new videos sequentially (each up to 60 MB)
+      // Upload new videos sequentially (max 100 MB each — Cloudinary limit)
       const hasNewVideos = Object.values(newColorVideoFiles).some((files) => files.length > 0);
       if (hasNewVideos) {
         const vidSig = await getUploadSignature("video");
@@ -539,7 +561,7 @@ export default function Products() {
       }
     } catch (err) {
       console.error("Product save error:", err);
-      showModal("error", "Upload failed", "File upload failed. Please check your connection and try again.");
+      showModal("error", "Upload failed", err.message || "File upload failed. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
     }

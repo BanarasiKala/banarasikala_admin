@@ -17,6 +17,7 @@ const INITIAL_FORM_STATE = {
   payment_options: ["prepaid"],
   service_options: [],
   care_instructions: "",
+  key_highlights: [],
 };
 
 export default function Products() {
@@ -174,6 +175,7 @@ export default function Products() {
         videos: Array.isArray(product.videos) ? product.videos : [],
         cover_color_id: product.images?.find((img) => img.is_cover)?.color_id || "",
         occasion_ids: Array.isArray(product.occasion_ids) ? product.occasion_ids.map(Number).filter(Boolean) : [],
+        key_highlights: Array.isArray(product.key_highlights) ? product.key_highlights.map(String) : [],
       });
     } else { setEditingProduct(null); setFormData(INITIAL_FORM_STATE); }
     setNewColorImageFiles({});
@@ -337,7 +339,27 @@ export default function Products() {
     }));
   };
 
+  const handleKeyHighlightChange = (index, value) => {
+    setFormData((prev) => {
+      const next = [...(prev.key_highlights || [])];
+      next[index] = value;
+      return { ...prev, key_highlights: next };
+    });
+  };
 
+  const handleAddKeyHighlight = () => {
+    setFormData((prev) => ({
+      ...prev,
+      key_highlights: [...(prev.key_highlights || []), ""],
+    }));
+  };
+
+  const handleRemoveKeyHighlight = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      key_highlights: (prev.key_highlights || []).filter((_, i) => i !== index),
+    }));
+  };
 
   const getUploadSignature = async (resourceType) => {
     const token = localStorage.getItem("accessToken");
@@ -469,6 +491,9 @@ export default function Products() {
         payment_options: formData.payment_options || [],
         service_options: formData.service_options || [],
         care_instructions: formData.care_instructions || "",
+        key_highlights: Array.isArray(formData.key_highlights)
+          ? formData.key_highlights.map((h) => String(h || "").trim()).filter(Boolean)
+          : [],
       };
 
       const token = localStorage.getItem("accessToken");
@@ -744,6 +769,9 @@ export default function Products() {
         onRemoveSavedColorVideo={handleRemoveSavedColorVideo}
         onSave={handleSave}
         onCalculateDiscount={calculateDiscount}
+        onKeyHighlightChange={handleKeyHighlightChange}
+        onAddKeyHighlight={handleAddKeyHighlight}
+        onRemoveKeyHighlight={handleRemoveKeyHighlight}
         submitting={submitting}
         editingProduct={editingProduct}
         materials={materials}

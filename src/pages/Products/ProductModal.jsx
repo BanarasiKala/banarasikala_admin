@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { imgUrl } from "../../utils/cloudinary";
-import { X, Calculator, Hash, AlertTriangle, Package, Sparkles, Star, Search, Video } from "lucide-react";
+import { X, Calculator, Hash, AlertTriangle, Package, Sparkles, Star, Search, Video, PlusCircle, Minus, Zap } from "lucide-react";
 
 const ProductModal = ({
   isOpen,
@@ -21,6 +21,9 @@ const ProductModal = ({
   onRemoveNewColorVideo,
   onRemoveSavedColorVideo,
   onSave,
+  onKeyHighlightChange,
+  onAddKeyHighlight,
+  onRemoveKeyHighlight,
   submitting,
   editingProduct,
   materials,
@@ -654,6 +657,56 @@ const ProductModal = ({
                   <input type="text" name="height" value={formData.height || ""} onChange={handleNumberInput} placeholder="e.g., 5" className={inputClasses(!isSelectionComplete)} />
                 </div>
               </div>
+            </div>
+
+            {/* SECTION 8: KEY HIGHLIGHTS */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm relative">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3 text-indigo-600">
+                  <Zap className="w-4 h-4" />
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Step 8: Key Highlights</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={onAddKeyHighlight}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#800020]/5 border border-[#800020]/20 text-[#800020] text-xs font-bold rounded-lg hover:bg-[#800020]/10 transition-colors"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" /> Add Line
+                </button>
+              </div>
+
+              <p className="text-[11px] text-gray-400 mb-4 leading-relaxed">
+                Each line appears as a bullet point on the product detail page. Blank lines are not saved.
+              </p>
+
+              {(!formData.key_highlights || formData.key_highlights.length === 0) ? (
+                <div className="text-center py-8 border-2 border-dashed border-gray-100 rounded-xl">
+                  <Zap className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-xs text-gray-400">No highlights yet. Click "Add Line" to add product key facts.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {formData.key_highlights.map((line, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <span className="text-[10px] text-gray-400 font-bold w-5 text-center flex-shrink-0">{index + 1}</span>
+                      <input
+                        type="text"
+                        placeholder="e.g., Handwoven pure Katan silk"
+                        value={line}
+                        onChange={(e) => onKeyHighlightChange(index, e.target.value)}
+                        className="flex-1 rounded-lg px-3 py-2 text-sm bg-white border border-gray-300 focus:border-[#800020] focus:ring-1 focus:ring-[#800020]/20 focus:outline-none text-gray-700"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onRemoveKeyHighlight(index)}
+                        className="flex-shrink-0 flex items-center justify-center p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
           </div>

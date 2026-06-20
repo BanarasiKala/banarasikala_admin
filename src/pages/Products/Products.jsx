@@ -361,6 +361,20 @@ export default function Products() {
     }));
   };
 
+  const handleCreateColor = async (name, hexCode, description) => {
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const token = localStorage.getItem("accessToken");
+    const res = await fetch(API_ENDPOINTS.colors, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name, hex_code: hexCode, slug, description: description || undefined }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to create color");
+    setColors((prev) => [...prev, data]);
+    return data;
+  };
+
   const getUploadSignature = async (resourceType) => {
     const token = localStorage.getItem("accessToken");
     const res = await fetch(
@@ -769,6 +783,7 @@ export default function Products() {
         onRemoveSavedColorVideo={handleRemoveSavedColorVideo}
         onSave={handleSave}
         onCalculateDiscount={calculateDiscount}
+        onCreateColor={handleCreateColor}
         onKeyHighlightChange={handleKeyHighlightChange}
         onAddKeyHighlight={handleAddKeyHighlight}
         onRemoveKeyHighlight={handleRemoveKeyHighlight}

@@ -21,6 +21,7 @@ const ProductModal = ({
   onRemoveNewColorVideo,
   onRemoveSavedColorVideo,
   onSave,
+  onCreateColor,
   onKeyHighlightChange,
   onAddKeyHighlight,
   onRemoveKeyHighlight,
@@ -34,6 +35,35 @@ const ProductModal = ({
   const navigate = useNavigate();
   const [colorSearch, setColorSearch] = useState("");
   const [previewImage, setPreviewImage] = useState(null);
+  const [showColorForm, setShowColorForm] = useState(false);
+  const [newColorName, setNewColorName] = useState("");
+  const [newColorHex, setNewColorHex] = useState("#800020");
+  const [newColorDescription, setNewColorDescription] = useState("");
+  const [colorFormError, setColorFormError] = useState("");
+  const [creatingColor, setCreatingColor] = useState(false);
+
+  const resetColorForm = () => {
+    setNewColorName("");
+    setNewColorHex("#800020");
+    setNewColorDescription("");
+    setColorFormError("");
+  };
+
+  const handleCreateColorSubmit = async () => {
+    if (!newColorName.trim()) { setColorFormError("Color name is required."); return; }
+    setCreatingColor(true);
+    setColorFormError("");
+    try {
+      await onCreateColor(newColorName.trim(), newColorHex, newColorDescription.trim());
+      resetColorForm();
+      setShowColorForm(false);
+      setColorSearch("");
+    } catch (err) {
+      setColorFormError(err.message);
+    } finally {
+      setCreatingColor(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -268,19 +298,95 @@ const ProductModal = ({
 
               <div className="space-y-6">
                 <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 shadow-inner">
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
                     <label className="text-[10px] font-black text-gray-400 uppercase">Available colors, stock and up to 6 images</label>
-                    <div className="relative w-48">
-                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
-                      <input 
-                        type="text"
-                        placeholder="Search color..."
-                        value={colorSearch}
-                        onChange={(e) => setColorSearch(e.target.value)}
-                        className="w-full pl-7 pr-2 py-1.5 text-[11px] bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-[#800020] shadow-sm"
-                      />
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1 sm:w-40">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search color..."
+                          value={colorSearch}
+                          onChange={(e) => { setColorSearch(e.target.value); setShowColorForm(false); }}
+                          className="w-full pl-7 pr-2 py-1.5 text-[11px] bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-[#800020] shadow-sm"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setShowColorForm((v) => !v); setNewColorName(colorSearch); setColorFormError(""); }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-[#800020] text-white text-[10px] font-bold rounded-lg hover:bg-[#6b001a] transition-colors whitespace-nowrap flex-shrink-0"
+                      >
+                        <PlusCircle className="w-3 h-3" /> New Color
+                      </button>
                     </div>
                   </div>
+
+                  {/* Inline create-color form */}
+                  {showColorForm && (
+                    <div className="mb-3 p-3 bg-white border border-[#800020]/20 rounded-xl shadow-sm animate-in slide-in-from-top-1 duration-150 space-y-2">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Create New Color</p>
+
+                      {/* Row 1: name + hex picker + hex text */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="Color name *"
+                          value={newColorName}
+                          onChange={(e) => { setNewColorName(e.target.value); setColorFormError(""); }}
+                          className="flex-1 px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#800020]"
+                        />
+                        <div className="flex items-center gap-1.5 border border-gray-300 rounded-lg px-2 py-1.5 bg-white self-stretch sm:self-auto">
+                          <input
+                            type="color"
+                            value={/^#[0-9a-fA-F]{6}$/.test(newColorHex) ? newColorHex : "#800020"}
+                            onChange={(e) => setNewColorHex(e.target.value)}
+                            className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent p-0 flex-shrink-0"
+                            title="Pick color"
+                          />
+                          <input
+                            type="text"
+                            value={newColorHex}
+                            onChange={(e) => setNewColorHex(e.target.value)}
+                            placeholder="#rrggbb"
+                            maxLength={7}
+                            className="flex-1 min-w-0 sm:w-20 text-[11px] font-mono text-gray-600 focus:outline-none border-0 bg-transparent"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Row 2: description */}
+                      <input
+                        type="text"
+                        placeholder="Description (optional)"
+                        value={newColorDescription}
+                        onChange={(e) => setNewColorDescription(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#800020]"
+                      />
+
+                      {colorFormError && (
+                        <p className="text-[10px] text-red-600 font-semibold">{colorFormError}</p>
+                      )}
+
+                      {/* Row 3: actions */}
+                      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => { setShowColorForm(false); resetColorForm(); }}
+                          className="w-full sm:w-auto px-3 py-2 sm:py-1.5 border border-gray-200 text-gray-500 text-[10px] font-bold rounded-lg hover:bg-gray-50 transition-colors text-center"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCreateColorSubmit}
+                          disabled={creatingColor}
+                          className="w-full sm:w-auto px-3 py-2 sm:py-1.5 bg-[#800020] text-white text-[10px] font-bold rounded-lg hover:bg-[#6b001a] disabled:opacity-60 transition-colors text-center"
+                        >
+                          {creatingColor ? "Creating…" : "Create Color"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar p-1">
                     {filteredColors.map((color) => {
@@ -427,9 +533,16 @@ const ProductModal = ({
                       );
                     })}
                     {filteredColors.length === 0 && (
-                      <div className="col-span-full py-12 text-center">
+                      <div className="col-span-full py-10 text-center">
                         <AlertTriangle className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                        <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">No colors found matching "{colorSearch}"</p>
+                        <p className="text-gray-400 text-xs font-medium uppercase tracking-widest mb-3">No colors found{colorSearch ? ` matching "${colorSearch}"` : ""}</p>
+                        <button
+                          type="button"
+                          onClick={() => { setShowColorForm(true); setNewColorName(colorSearch); setColorFormError(""); }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#800020]/5 border border-[#800020]/20 text-[#800020] text-[10px] font-bold rounded-lg hover:bg-[#800020]/10 transition-colors"
+                        >
+                          <PlusCircle className="w-3 h-3" /> Create {colorSearch ? `"${colorSearch}"` : "new color"}
+                        </button>
                       </div>
                     )}
                   </div>

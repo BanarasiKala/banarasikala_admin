@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { imgUrl } from "../../utils/cloudinary";
+import compressImage from "../../utils/compressImage";
 import { Plus, Pencil, Trash2, Search, Filter, ChevronLeft, ChevronRight, Package, AlertCircle, Star, Sparkles, CheckCircle, AlertTriangle, X } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
 import ProductModal from "./ProductModal";
@@ -33,6 +34,7 @@ export default function Products() {
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [newColorImageFiles, setNewColorImageFiles] = useState({});
   const [newColorVideoFiles, setNewColorVideoFiles] = useState({});
+  const [videoStatus, setVideoStatus] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
     material: "",
@@ -400,7 +402,10 @@ export default function Products() {
 
   const uploadToCloudinary = async (file, sigData) => {
     const form = new FormData();
-    form.append("file", file);
+    const uploadFile = sigData.resourceType === "image"
+      ? await compressImage(file, 2000, 0.85)
+      : file;
+    form.append("file", uploadFile);
     form.append("api_key", sigData.apiKey);
     form.append("timestamp", String(sigData.timestamp));
     form.append("signature", sigData.signature);
@@ -421,6 +426,35 @@ export default function Products() {
       throw new Error(msg);
     }
     return data.secure_url;
+  };
+
+  const getS3VideoUploadUrl = async (fileName, contentType) => {
+    const token = localStorage.getItem("accessToken");
+    const params = new URLSearchParams({ fileName, contentType });
+    const res = await fetch(
+      `${API_ENDPOINTS.products}/s3-video-url?${params}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) throw new Error("Failed to get S3 upload URL");
+    return res.json(); // { uploadUrl, publicUrl }
+  };
+
+  const uploadVideoToS3 = async (file, onUploadStart) => {
+    const { uploadUrl, publicUrl } = await getS3VideoUploadUrl(
+      file.name,
+      file.type || "video/mp4"
+    );
+
+    if (onUploadStart) onUploadStart();
+
+    const res = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type || "video/mp4" },
+      body: file,
+    });
+    if (!res.ok) throw new Error(`S3 upload failed (${res.status})`);
+
+    return publicUrl;
   };
 
   const calculateDiscount = () => {
@@ -496,16 +530,18 @@ export default function Products() {
       // Existing saved videos
       const allVideos = [...(formData.videos || [])];
 
-      // Upload new videos sequentially (max 100 MB each — Cloudinary limit)
-      const hasNewVideos = Object.values(newColorVideoFiles).some((files) => files.length > 0);
-      if (hasNewVideos) {
-        const vidSig = await getUploadSignature("video");
-        for (const [colorId, files] of Object.entries(newColorVideoFiles)) {
-          for (const file of files) {
-            const url = await uploadToCloudinary(file, vidSig);
-            allVideos.push({ color_id: parseInt(colorId, 10), url });
-          }
+      // Upload new videos directly to S3
+      const allNewVideos = Object.entries(newColorVideoFiles).flatMap(([colorId, files]) =>
+        files.map((file) => ({ colorId: parseInt(colorId, 10), file }))
+      );
+      if (allNewVideos.length > 0) {
+        for (let i = 0; i < allNewVideos.length; i++) {
+          const { colorId, file } = allNewVideos[i];
+          setVideoStatus(`Uploading video ${i + 1} of ${allNewVideos.length}…`);
+          const url = await uploadVideoToS3(file);
+          allVideos.push({ color_id: colorId, url });
         }
+        setVideoStatus("");
       }
 
       const payloadData = {
@@ -564,6 +600,7 @@ export default function Products() {
       showModal("error", "Upload failed", err.message || "File upload failed. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
+      setVideoStatus("");
     }
   };
 
@@ -810,6 +847,7 @@ export default function Products() {
         onAddKeyHighlight={handleAddKeyHighlight}
         onRemoveKeyHighlight={handleRemoveKeyHighlight}
         submitting={submitting}
+        videoStatus={videoStatus}
         editingProduct={editingProduct}
         materials={materials}
         varieties={varieties}

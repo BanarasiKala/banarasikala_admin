@@ -10,6 +10,7 @@ const INITIAL_FORM_STATE = {
   name: "", sku: "", description: "", short_description: "",
   selling_price: "", mrp_price: "", cost_price: "", discount_percent: "",
   images: [], videos: [], cover_color_id: "", stock_quantity: 0, low_stock_threshold: 5,
+  processing_days: "",
   color_stocks: {},
   weight: "", length: "6.5", width: "1.1", height: "5",
   material_id: "", variety_id: "", occasion_ids: [],
@@ -597,6 +598,9 @@ export default function Products() {
         cost_price: formData.cost_price ? parseFloat(formData.cost_price) : null,
         stock_quantity: parseInt(formData.stock_quantity) || 0,
         low_stock_threshold: parseInt(formData.low_stock_threshold) || 0,
+        processing_days: formData.processing_days === "" || formData.processing_days === null || formData.processing_days === undefined
+          ? null
+          : parseInt(formData.processing_days, 10),
         color_stocks: formData.color_stocks || {},
         images: allImages,
         videos: allVideos,

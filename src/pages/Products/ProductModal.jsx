@@ -647,6 +647,12 @@ const ProductModal = ({
                     )}
                   </div>
 
+                  <div>
+                    <label className={labelClasses(!isSelectionComplete)}>Processing Days (Dispatch Time)</label>
+                    <input type="text" name="processing_days" value={formData.processing_days} onChange={handleNumberInput} placeholder="Default: 4" className={inputClasses(!isSelectionComplete)} />
+                    <p className="text-[9px] text-gray-400 mt-2 italic leading-relaxed">Days to dispatch before courier transit, used for the estimated delivery date. Leave blank to use the site default.</p>
+                  </div>
+
                 </div>
               </div>
             </div>

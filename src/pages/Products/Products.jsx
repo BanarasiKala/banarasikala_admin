@@ -362,6 +362,43 @@ export default function Products() {
     }));
   };
 
+  // Reorder the items of a single color within a flat media array, leaving items of
+  // other colors untouched. Order within a color is what the storefront uses
+  // (display_order is derived from array position at save time).
+  const reorderColorGroup = (list, colorId, from, to) => {
+    const group = (list || []).filter((item) => parseInt(item.color_id, 10) === colorId);
+    const rest = (list || []).filter((item) => parseInt(item.color_id, 10) !== colorId);
+    if (from < 0 || to < 0 || from >= group.length || to >= group.length || from === to) return list;
+    const [moved] = group.splice(from, 1);
+    group.splice(to, 0, moved);
+    return [...rest, ...group];
+  };
+
+  const reorderNewFiles = (map, colorId, from, to) => {
+    const key = String(colorId);
+    const arr = [...(map[key] || [])];
+    if (from < 0 || to < 0 || from >= arr.length || to >= arr.length || from === to) return map;
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    return { ...map, [key]: arr };
+  };
+
+  const handleReorderSavedImage = (colorId, from, to) => {
+    setFormData((prev) => ({ ...prev, images: reorderColorGroup(prev.images, colorId, from, to) }));
+  };
+
+  const handleReorderNewImage = (colorId, from, to) => {
+    setNewColorImageFiles((prev) => reorderNewFiles(prev, colorId, from, to));
+  };
+
+  const handleReorderSavedVideo = (colorId, from, to) => {
+    setFormData((prev) => ({ ...prev, videos: reorderColorGroup(prev.videos, colorId, from, to) }));
+  };
+
+  const handleReorderNewVideo = (colorId, from, to) => {
+    setNewColorVideoFiles((prev) => reorderNewFiles(prev, colorId, from, to));
+  };
+
   const handleKeyHighlightChange = (index, value) => {
     setFormData((prev) => {
       const next = [...(prev.key_highlights || [])];
@@ -848,6 +885,10 @@ export default function Products() {
         onColorVideoUpload={handleColorVideoUpload}
         onRemoveNewColorVideo={handleRemoveNewColorVideo}
         onRemoveSavedColorVideo={handleRemoveSavedColorVideo}
+        onReorderSavedImage={handleReorderSavedImage}
+        onReorderNewImage={handleReorderNewImage}
+        onReorderSavedVideo={handleReorderSavedVideo}
+        onReorderNewVideo={handleReorderNewVideo}
         onSave={handleSave}
         onCalculateDiscount={calculateDiscount}
         onCreateColor={handleCreateColor}

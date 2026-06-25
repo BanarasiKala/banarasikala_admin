@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { imgUrl } from "../../utils/cloudinary";
-import { X, Calculator, Hash, AlertTriangle, Package, Sparkles, Star, Search, Video, PlusCircle, Minus, Zap } from "lucide-react";
+import { X, Calculator, Hash, AlertTriangle, Package, Sparkles, Star, Search, Video, PlusCircle, Minus, Zap, GripVertical } from "lucide-react";
 
 const ProductModal = ({
   isOpen,
@@ -20,6 +20,10 @@ const ProductModal = ({
   onColorVideoUpload,
   onRemoveNewColorVideo,
   onRemoveSavedColorVideo,
+  onReorderSavedImage,
+  onReorderNewImage,
+  onReorderSavedVideo,
+  onReorderNewVideo,
   onSave,
   onCreateColor,
   onKeyHighlightChange,
@@ -42,6 +46,32 @@ const ProductModal = ({
   const [newColorDescription, setNewColorDescription] = useState("");
   const [colorFormError, setColorFormError] = useState("");
   const [creatingColor, setCreatingColor] = useState(false);
+  // Tracks the media item currently being dragged for reordering.
+  // { colorId, type: "savedImage" | "newImage" | "savedVideo" | "newVideo", index }
+  const [dragItem, setDragItem] = useState(null);
+
+  const reorderHandlers = {
+    savedImage: onReorderSavedImage,
+    newImage: onReorderNewImage,
+    savedVideo: onReorderSavedVideo,
+    newVideo: onReorderNewVideo,
+  };
+
+  // Reorder only happens between items of the same color and same type
+  // (saved-with-saved, new-with-new), so a drag never mixes the two sources.
+  const handleMediaDrop = (type, colorId, targetIndex) => {
+    if (!dragItem || dragItem.type !== type || String(dragItem.colorId) !== String(colorId)) {
+      setDragItem(null);
+      return;
+    }
+    if (dragItem.index !== targetIndex) {
+      reorderHandlers[type]?.(colorId, dragItem.index, targetIndex);
+    }
+    setDragItem(null);
+  };
+
+  const isDragging = (type, colorId, index) =>
+    dragItem && dragItem.type === type && String(dragItem.colorId) === String(colorId) && dragItem.index === index;
 
   const resetColorForm = () => {
     setNewColorName("");
@@ -435,7 +465,16 @@ const ProductModal = ({
                               
                               <div className="grid grid-cols-2 gap-1">
                                 {savedImages.map((img, idx) => (
-                                  <div key={img.url} className="relative border rounded overflow-hidden">
+                                  <div
+                                    key={img.url}
+                                    draggable
+                                    onDragStart={() => setDragItem({ colorId: colorIdNum, type: "savedImage", index: idx })}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => { e.preventDefault(); handleMediaDrop("savedImage", colorIdNum, idx); }}
+                                    onDragEnd={() => setDragItem(null)}
+                                    title="Drag to reorder"
+                                    className={`relative border rounded overflow-hidden cursor-move ${isDragging("savedImage", colorIdNum, idx) ? "opacity-40 ring-2 ring-[#800020]" : ""}`}
+                                  >
                                     <button
                                       type="button"
                                       title="Click to preview"
@@ -444,6 +483,9 @@ const ProductModal = ({
                                     >
                                       <img src={imgUrl(img.url)} alt={`${color.name}`} className="w-full h-10 object-contain bg-white" />
                                     </button>
+                                    <span className="absolute bottom-0 left-0 bg-black/45 text-white text-[7px] px-1 rounded-tr flex items-center gap-0.5">
+                                      <GripVertical className="w-2 h-2" />{idx + 1}
+                                    </span>
                                     <div className="absolute top-0 left-0 right-0 flex justify-between p-0.5 bg-black/45">
                                       <button
                                         type="button"
@@ -466,7 +508,16 @@ const ProductModal = ({
                                   const previewUrl = URL.createObjectURL(file);
                                   const isSelectedCover = String(formData.cover_color_id) === String(colorIdStr);
                                   return (
-                                    <div key={`${file.name}-${idx}`} className="relative border rounded overflow-hidden">
+                                    <div
+                                      key={`${file.name}-${idx}`}
+                                      draggable
+                                      onDragStart={() => setDragItem({ colorId: colorIdNum, type: "newImage", index: idx })}
+                                      onDragOver={(e) => e.preventDefault()}
+                                      onDrop={(e) => { e.preventDefault(); handleMediaDrop("newImage", colorIdNum, idx); }}
+                                      onDragEnd={() => setDragItem(null)}
+                                      title="Drag to reorder"
+                                      className={`relative border rounded overflow-hidden cursor-move ${isDragging("newImage", colorIdNum, idx) ? "opacity-40 ring-2 ring-[#800020]" : ""}`}
+                                    >
                                       <button
                                         type="button"
                                         title="Click to preview"
@@ -475,6 +526,9 @@ const ProductModal = ({
                                       >
                                         <img src={previewUrl} alt={file.name} className="w-full h-10 object-contain bg-white" />
                                       </button>
+                                      <span className="absolute bottom-0 left-0 bg-black/45 text-white text-[7px] px-1 rounded-tr flex items-center gap-0.5">
+                                        <GripVertical className="w-2 h-2" />new
+                                      </span>
                                       <div className="absolute top-0 right-0 p-0.5 bg-black/45 flex gap-0.5">
                                         <button
                                           type="button"
@@ -513,15 +567,35 @@ const ProductModal = ({
                                     className="w-full text-[9px] text-gray-500 file:mr-0 file:px-2 file:py-1 file:rounded file:border-0 file:bg-indigo-600 file:text-white file:cursor-pointer"
                                   />
                                 )}
-                                {savedVideos.map((v) => (
-                                  <div key={v.url} className="flex items-center gap-1 bg-gray-50 rounded px-1.5 py-1 border border-gray-100">
+                                {savedVideos.map((v, vIdx) => (
+                                  <div
+                                    key={v.url}
+                                    draggable
+                                    onDragStart={() => setDragItem({ colorId: colorIdNum, type: "savedVideo", index: vIdx })}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => { e.preventDefault(); handleMediaDrop("savedVideo", colorIdNum, vIdx); }}
+                                    onDragEnd={() => setDragItem(null)}
+                                    title="Drag to reorder"
+                                    className={`flex items-center gap-1 bg-gray-50 rounded px-1.5 py-1 border border-gray-100 cursor-move ${isDragging("savedVideo", colorIdNum, vIdx) ? "opacity-40 ring-2 ring-[#800020]" : ""}`}
+                                  >
+                                    <GripVertical className="w-2.5 h-2.5 text-gray-300 flex-shrink-0" />
                                     <Video className="w-3 h-3 text-indigo-400 flex-shrink-0" />
-                                    <span className="text-[8px] text-gray-500 truncate flex-1">Saved</span>
+                                    <span className="text-[8px] text-gray-500 truncate flex-1">Saved {vIdx + 1}</span>
                                     <button type="button" onClick={() => onRemoveSavedColorVideo(colorIdNum, v.url)} className="text-[7px] px-1 rounded bg-red-500 text-white">X</button>
                                   </div>
                                 ))}
                                 {localVideoFiles.map((file, vIdx) => (
-                                  <div key={`${file.name}-${vIdx}`} className="flex items-center gap-1 bg-indigo-50 rounded px-1.5 py-1 border border-indigo-100">
+                                  <div
+                                    key={`${file.name}-${vIdx}`}
+                                    draggable
+                                    onDragStart={() => setDragItem({ colorId: colorIdNum, type: "newVideo", index: vIdx })}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => { e.preventDefault(); handleMediaDrop("newVideo", colorIdNum, vIdx); }}
+                                    onDragEnd={() => setDragItem(null)}
+                                    title="Drag to reorder"
+                                    className={`flex items-center gap-1 bg-indigo-50 rounded px-1.5 py-1 border border-indigo-100 cursor-move ${isDragging("newVideo", colorIdNum, vIdx) ? "opacity-40 ring-2 ring-[#800020]" : ""}`}
+                                  >
+                                    <GripVertical className="w-2.5 h-2.5 text-indigo-300 flex-shrink-0" />
                                     <Video className="w-3 h-3 text-indigo-500 flex-shrink-0" />
                                     <span className="text-[8px] text-indigo-600 truncate flex-1">{file.name}</span>
                                     <button type="button" onClick={() => onRemoveNewColorVideo(colorIdStr, vIdx)} className="text-[7px] px-1 rounded bg-red-500 text-white">X</button>

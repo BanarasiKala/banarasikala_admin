@@ -8,6 +8,7 @@ import Layout from "./layout/Layout";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import Users from "./pages/Users/Users";
 import Products from "./pages/Products/Products";
+import Arrange from "./pages/Arrange/Arrange";
 import Varieties from "./pages/Varieties/Varieties";
 import Sizes from "./pages/Sizes/Sizes";
 import Colors from "./pages/Colors/Colors";
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
           <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
+          <Route path="/arrange" element={<ProtectedRoute><Arrange /></ProtectedRoute>} />
           <Route path="/varieties" element={<ProtectedRoute><Varieties /></ProtectedRoute>} />
           <Route path="/sizes" element={<ProtectedRoute><Sizes /></ProtectedRoute>} />
           <Route path="/colors" element={<ProtectedRoute><Colors /></ProtectedRoute>} />

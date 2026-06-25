@@ -187,7 +187,15 @@ export default function Products() {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+    setFormData((prev) => {
+      // Special Collection and New Arrival are mutually exclusive: enabling one
+      // turns the other off. A product can still be neither.
+      if (type === "checkbox" && checked && (name === "special_collection" || name === "is_new_arrival")) {
+        const other = name === "special_collection" ? "is_new_arrival" : "special_collection";
+        return { ...prev, [name]: true, [other]: false };
+      }
+      return { ...prev, [name]: type === "checkbox" ? checked : value };
+    });
   };
 
   const handleOccasionToggle = (id) => {

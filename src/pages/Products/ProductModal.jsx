@@ -826,22 +826,14 @@ const ProductModal = ({
                 <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Step 7: Physical Measurements</h3>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <label className={labelClasses(!isSelectionComplete)}>Weight (Kilograms)</label>
-                  <input type="text" name="weight" value={formData.weight} onChange={handleNumberInput} placeholder="e.g., 0.45" className={inputClasses(!isSelectionComplete)} />
+                  <label className={labelClasses(!isSelectionComplete)}>Weight (grams)</label>
+                  <input type="text" name="weight" value={formData.weight} onChange={handleNumberInput} placeholder="e.g., 450" className={inputClasses(!isSelectionComplete)} />
                 </div>
                 <div>
-                  <label className={labelClasses(!isSelectionComplete)}>Length (cm)</label>
-                  <input type="text" name="length" value={formData.length} onChange={handleNumberInput} placeholder="e.g., 650" className={inputClasses(!isSelectionComplete)} />
-                </div>
-                <div>
-                  <label className={labelClasses(!isSelectionComplete)}>Width (cm)</label>
-                  <input type="text" name="width" value={formData.width} onChange={handleNumberInput} placeholder="e.g., 110" className={inputClasses(!isSelectionComplete)} />
-                </div>
-                <div>
-                  <label className={labelClasses(!isSelectionComplete)}>Height (cm)</label>
-                  <input type="text" name="height" value={formData.height || ""} onChange={handleNumberInput} placeholder="e.g., 5" className={inputClasses(!isSelectionComplete)} />
+                  <label className={labelClasses(!isSelectionComplete)}>Saree Length (Meter)</label>
+                  <input type="text" name="length" value={formData.length} onChange={handleNumberInput} placeholder="e.g., 6.5" className={inputClasses(!isSelectionComplete)} />
                 </div>
               </div>
             </div>

@@ -19,6 +19,7 @@ import {
   RotateCcw,
   RefreshCw,
   XCircle,
+  Film,
   X,
 } from "lucide-react";
 
@@ -30,6 +31,7 @@ const navItems = [
   { id: "colors", label: "Colors Palette", subtext: "(Red, Blue, Gold, etc.)", icon: Palette },
   { id: "coupons", label: "Coupons", subtext: "(Offers & Discounts)", icon: TicketPercent },
   { id: "products", label: "Products", subtext: "(Saree, Suit, Catalog)", icon: ShoppingBag },
+  { id: "reels", label: "Reels", subtext: "(Shoppable videos)", icon: Film },
   { id: "arrange", label: "Arrange Storefront", subtext: "(Order on home & collection)", icon: ArrowUpDown },
   { id: "users", label: "User Management", icon: Users },
   { id: "orders", label: "Orders", icon: Box },

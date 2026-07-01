@@ -18,6 +18,7 @@ import Occasions from "./pages/Occasions/Occasions";
 import Orders from "./pages/Orders/Orders";
 import Inventory from "./pages/Inventory/Inventory";
 import Reviews from "./pages/Reviews/Reviews";
+import Reels from "./pages/Reels/Reels";
 import Analytics from "./pages/Analytics/Analytics";
 import Payments from "./pages/Payments/Payments";
 import Login from "./pages/Auth/Login";
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/exchanges" element={<ProtectedRoute><OrderActions type="exchange" /></ProtectedRoute>} />
           <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
           <Route path="/reviews" element={<ProtectedRoute><Reviews /></ProtectedRoute>} />
+          <Route path="/reels" element={<ProtectedRoute><Reels /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
           <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
         </Routes>

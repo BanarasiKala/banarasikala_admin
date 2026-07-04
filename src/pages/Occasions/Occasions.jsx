@@ -11,10 +11,31 @@ import {
   AlertCircle,
   Search,
   Sparkles,
+  Video,
+  UploadCloud,
+  X,
 } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
 
-const INITIAL_FORM = { name: "", description: "" };
+const INITIAL_FORM = { name: "", description: "", video: "" };
+
+// Upload directly to S3 via a pre-signed PUT URL, reporting progress. The
+// Content-Type MUST equal the value the URL was signed with or S3 returns 403.
+const uploadToS3 = (uploadUrl, file, onProgress, contentType) =>
+  new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader("Content-Type", contentType || file.type || "video/mp4");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`S3 upload rejected the file (HTTP ${xhr.status})`));
+    xhr.onerror = () => reject(new Error("Network error uploading to S3 (check connection / bucket CORS)"));
+    xhr.send(file);
+  });
 
 export default function Occasions() {
   const [occasions, setOccasions] = useState([]);
@@ -24,8 +45,9 @@ export default function Occasions() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOccasion, setEditingOccasion] = useState(null);
   const [formData, setFormData] = useState(INITIAL_FORM);
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [uploadError, setUploadError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
 
   // Unified modal system
@@ -83,14 +105,14 @@ export default function Occasions() {
   const openFormModal = (occasion = null) => {
     if (occasion) {
       setEditingOccasion(occasion);
-      setFormData({ name: occasion.name, description: occasion.description || "" });
-      setImagePreview(occasion.image || null);
+      setFormData({ name: occasion.name, description: occasion.description || "", video: occasion.video || "" });
     } else {
       setEditingOccasion(null);
       setFormData(INITIAL_FORM);
-      setImagePreview(null);
     }
-    setImageFile(null);
+    setUploading(false);
+    setUploadPct(0);
+    setUploadError("");
     setIsModalOpen(true);
   };
 
@@ -99,6 +121,38 @@ export default function Occasions() {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
+
+  // Upload the chosen video straight to S3, then keep the public URL on the form.
+  const handleVideoFile = async (file) => {
+    if (!file) return;
+    const token = localStorage.getItem("accessToken");
+    if (!token) {
+      setUploadError("You are not logged in. Please log in again.");
+      return;
+    }
+    setUploadError("");
+    setUploading(true);
+    setUploadPct(0);
+    try {
+      const contentType = file.type || "video/mp4";
+      const params = new URLSearchParams({ fileName: file.name || "occasion.mp4", contentType });
+      const res = await fetch(`${API_ENDPOINTS.occasions}/admin/upload-url?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || `Could not get upload URL (HTTP ${res.status})`);
+      }
+      const { uploadUrl, publicUrl } = await res.json();
+      // Content-Type on the PUT must match what the URL was signed for.
+      await uploadToS3(uploadUrl, file, setUploadPct, contentType);
+      setFormData((f) => ({ ...f, video: publicUrl }));
+    } catch (e) {
+      setUploadError(e.message || "Video upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -122,22 +176,20 @@ export default function Occasions() {
           const method = editingOccasion ? "PUT" : "POST";
           const token = localStorage.getItem("accessToken");
 
-          const formDataToSend = new FormData();
-          formDataToSend.append("name", formData.name);
-          if (formData.description) {
-            formDataToSend.append("description", formData.description);
-          }
-          formDataToSend.append("slug", editingOccasion ? editingOccasion.slug : slug);
-          if (imageFile) {
-            formDataToSend.append("image", imageFile);
-          }
+          const payload = {
+            name: formData.name,
+            slug: editingOccasion ? editingOccasion.slug : slug,
+            video: formData.video,
+          };
+          if (formData.description) payload.description = formData.description;
 
           const res = await fetch(url, {
             method,
             headers: {
-              'Authorization': `Bearer ${token}`
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
             },
-            body: formDataToSend,
+            body: JSON.stringify(payload),
           });
 
           if (res.ok) {
@@ -194,8 +246,10 @@ export default function Occasions() {
       async () => {
         closeModal();
         try {
+          const token = localStorage.getItem("accessToken");
           const res = await fetch(`${API_ENDPOINTS.occasions}/${occasion.id}`, {
             method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
           });
           if (res.ok) {
             await fetchData();
@@ -303,7 +357,7 @@ export default function Occasions() {
                 ID
               </th>
               <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                Image
+                Video
               </th>
               <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                 Occasion Name
@@ -322,7 +376,7 @@ export default function Occasions() {
           <tbody className="divide-y divide-gray-100">
             {filteredOccasions.length === 0 ? (
               <tr>
-                <td colSpan="6" className="px-4 py-16 text-center">
+                <td colSpan="7" className="px-4 py-16 text-center">
                   <Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                   <p className="text-gray-500">No occasions found. Add your first occasion!</p>
                 </td>
@@ -339,10 +393,18 @@ export default function Occasions() {
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    {occasion.image ? (
+                    {occasion.video ? (
+                      <video
+                        src={occasion.video}
+                        className="w-16 h-10 rounded object-cover bg-black"
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                    ) : occasion.image ? (
                       <img src={imgUrl(occasion.image)} alt={occasion.name} className="w-10 h-10 rounded object-cover" />
                     ) : (
-                      <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs">No img</div>
+                      <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-gray-400 text-[10px]">No media</div>
                     )}
                   </td>
                   <td className="px-4 py-4">
@@ -389,7 +451,7 @@ export default function Occasions() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setIsModalOpen(false)}
+            onClick={() => !uploading && setIsModalOpen(false)}
           />
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl relative z-10 animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b bg-gradient-to-r from-[#800020] to-[#a0152d] text-white rounded-t-2xl">
@@ -428,36 +490,69 @@ export default function Occasions() {
               </div>
               <div>
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Image {editingOccasion ? "" : "*"}
+                  Video {editingOccasion ? "" : "*"}
                 </label>
-                <input
-                  type="file"
-                  accept="image/*,.heic,.heif"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      setImageFile(e.target.files[0]);
-                      setImagePreview(URL.createObjectURL(e.target.files[0]));
-                    }
-                  }}
-                  className="w-full mt-1.5 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                />
-                {imagePreview && (
-                  <div className="mt-2">
-                    <img src={imgUrl(imagePreview)} alt="Preview" className="w-20 h-20 object-cover rounded" />
+                {uploadError && (
+                  <div className="mt-1.5 bg-red-50 text-red-600 text-xs font-semibold px-3 py-2 rounded-lg">
+                    {uploadError}
                   </div>
                 )}
+                <div className="mt-1.5">
+                  {formData.video ? (
+                    <div className="relative bg-black rounded-lg overflow-hidden w-32 h-40">
+                      <video src={formData.video} className="w-full h-full object-cover" muted controls playsInline />
+                      <button
+                        type="button"
+                        onClick={() => setFormData((f) => ({ ...f, video: "" }))}
+                        className="absolute top-1 right-1 bg-black/70 text-white p-1 rounded-full"
+                        title="Remove video"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg py-8 cursor-pointer transition-colors ${
+                        uploading ? "border-[#800020]/40 bg-[#800020]/5" : "border-gray-300 hover:border-[#800020]/40"
+                      }`}
+                    >
+                      {uploading ? (
+                        <>
+                          <UploadCloud className="w-7 h-7 text-[#800020]" />
+                          <div className="w-40 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-[#800020] transition-all" style={{ width: `${uploadPct}%` }} />
+                          </div>
+                          <span className="text-xs text-gray-500">Uploading… {uploadPct}%</span>
+                        </>
+                      ) : (
+                        <>
+                          <Video className="w-7 h-7 text-gray-300" />
+                          <span className="text-xs text-gray-500 font-medium">Click to upload a video (MP4)</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        disabled={uploading}
+                        onChange={(e) => handleVideoFile(e.target.files?.[0])}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t mt-6">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                  disabled={uploading}
+                  className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting || !formData.name.trim() || (!editingOccasion && !imageFile)}
+                  disabled={submitting || uploading || !formData.name.trim() || !formData.video}
                   className="px-5 py-2 bg-[#800020] text-white font-bold rounded-lg flex items-center gap-2 hover:bg-[#6b001a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />}

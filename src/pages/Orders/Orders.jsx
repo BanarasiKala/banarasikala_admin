@@ -7,6 +7,8 @@ const ORDER_STATUSES = [
   "all",
   "Pending",
   "Order Placed",
+  "Pickup Scheduled",
+  "Out For Pickup",
   "Picked Up",
   "Shipped",
   "Out For Delivery",

@@ -13,6 +13,7 @@ export const API_ENDPOINTS = {
   coupons: `${API_BASE_URL}/api/coupons`,
   feedback: `${API_BASE_URL}/api/feedback`,
   reels: `${API_BASE_URL}/api/reels`,
+  royale: `${API_BASE_URL}/api/royale`,
   auth: `${API_BASE_URL}/api/auth`,
 };
 

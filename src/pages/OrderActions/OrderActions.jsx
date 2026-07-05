@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, RefreshCw, RotateCcw, XCircle } from "lucide-react";
+import { CheckCircle2, IndianRupee, RefreshCw, RotateCcw, XCircle } from "lucide-react";
 import API_ENDPOINTS from "../../config/api";
 
 const ACTION_LABELS = {
@@ -73,6 +73,26 @@ export default function OrderActions({ type = "return" }) {
       await loadRows();
     } catch (err) {
       setError(err.message || "Unable to update request.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // Money moves ONLY here: ledger settlement + wallet share + automatic
+  // gateway refund. Completing a return just records the item is back.
+  const initiateRefund = async (id) => {
+    setSavingId(id);
+    setError("");
+    try {
+      const response = await fetch(`${API_ENDPOINTS.orders}/admin/item-actions/${id}/initiate-refund`, {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to initiate refund.");
+      await loadRows();
+    } catch (err) {
+      setError(err.message || "Unable to initiate refund.");
     } finally {
       setSavingId(null);
     }
@@ -162,31 +182,63 @@ export default function OrderActions({ type = "return" }) {
                   <div>{formatMoney(row.estimated_refund_amount)}</div>
                   {type === "return" && (
                     <div className="mt-1 text-[10px] text-gray-400">
-                      Fwd {formatMoney(row.forward_shipping_deduction)} · Pickup {formatMoney(row.reverse_shipping_deduction)}
+                      Pickup {formatMoney(row.reverse_shipping_deduction)} · Coupon adj {formatMoney(row.meta?.coupon_adjustment || 0)}
                     </div>
                   )}
                 </td>
                 <td className="px-5 py-4">
                   <span className="rounded-full bg-[#800020]/10 px-2.5 py-1 text-[10px] font-bold text-[#800020]">{row.status}</span>
+                  {type === "return" && row.Order?.payment_method === "COD" && (
+                    row.refund_bank_details ? (
+                      <div className="mt-2 rounded-lg bg-green-50 px-2.5 py-2 text-[10px] leading-relaxed text-green-900">
+                        <div className="font-bold uppercase text-green-700">Bank details submitted</div>
+                        <div>{row.refund_bank_details.account_holder_name}</div>
+                        <div className="font-mono">{row.refund_bank_details.account_number} · {row.refund_bank_details.ifsc_code}</div>
+                        <div>{row.refund_bank_details.bank_name}{row.refund_bank_details.branch_name ? ` · ${row.refund_bank_details.branch_name}` : ""}</div>
+                      </div>
+                    ) : String(row.refund_status || "").toLowerCase().includes("bank") ? (
+                      <div className="mt-2 text-[10px] font-bold uppercase text-amber-600">Awaiting customer bank details</div>
+                    ) : null
+                  )}
                 </td>
                 <td className="px-5 py-4 text-right">
                   <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      disabled={savingId === row.id}
-                      onClick={() => updateStatus(row.id, "Completed")}
-                      className="rounded bg-green-600 px-3 py-1.5 text-[10px] font-bold uppercase text-white"
-                    >
-                      <CheckCircle2 className="mr-1 inline h-3 w-3" /> Complete
-                    </button>
-                    <button
-                      type="button"
-                      disabled={savingId === row.id}
-                      onClick={() => updateStatus(row.id, "Rejected")}
-                      className="rounded border border-red-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase text-red-600"
-                    >
-                      Reject
-                    </button>
+                    {!["Completed", "Rejected", "Cancelled"].includes(row.status) && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={savingId === row.id}
+                          onClick={() => updateStatus(row.id, "Completed")}
+                          className="rounded bg-green-600 px-3 py-1.5 text-[10px] font-bold uppercase text-white"
+                        >
+                          <CheckCircle2 className="mr-1 inline h-3 w-3" /> Complete
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingId === row.id}
+                          onClick={() => updateStatus(row.id, "Rejected")}
+                          className="rounded border border-red-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase text-red-600"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+                    {type === "return" && row.status === "Completed" && !row.refund_initiated && (
+                      <button
+                        type="button"
+                        disabled={savingId === row.id}
+                        onClick={() => initiateRefund(row.id)}
+                        className="rounded bg-[#800020] px-3 py-1.5 text-[10px] font-bold uppercase text-white"
+                      >
+                        <IndianRupee className="mr-1 inline h-3 w-3" />
+                        {savingId === row.id ? "Initiating..." : `Initiate Refund ${formatMoney(row.estimated_refund_amount)}`}
+                      </button>
+                    )}
+                    {type === "return" && row.status === "Completed" && row.refund_initiated && (
+                      <span className="rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase text-green-700">
+                        <CheckCircle2 className="mr-1 inline h-3 w-3" /> Refund Initiated
+                      </span>
+                    )}
                   </div>
                 </td>
               </tr>

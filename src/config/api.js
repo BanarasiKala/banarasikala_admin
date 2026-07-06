@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
   feedback: `${API_BASE_URL}/api/feedback`,
   reels: `${API_BASE_URL}/api/reels`,
   royale: `${API_BASE_URL}/api/royale`,
+  boxSections: `${API_BASE_URL}/api/box-sections`,
   auth: `${API_BASE_URL}/api/auth`,
 };
 

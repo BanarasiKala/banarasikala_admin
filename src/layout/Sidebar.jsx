@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../config/api";
 import {
   LayoutDashboard,
+  LayoutGrid,
   Users,
   ShoppingBag,
   GitBranch,
@@ -34,6 +35,7 @@ const navItems = [
   { id: "products", label: "Products", subtext: "(Saree, Suit, Catalog)", icon: ShoppingBag },
   { id: "reels", label: "Reels", subtext: "(Shoppable videos)", icon: Film },
   { id: "royale", label: "Banaras Royale", subtext: "(Home showcase)", icon: Crown },
+  { id: "box-section", label: "Box Section", subtext: "(Home media mosaic)", icon: LayoutGrid },
   { id: "arrange", label: "Arrange Storefront", subtext: "(Order on home & collection)", icon: ArrowUpDown },
   { id: "users", label: "User Management", icon: Users },
   { id: "orders", label: "Orders", icon: Box },

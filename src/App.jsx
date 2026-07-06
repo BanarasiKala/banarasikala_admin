@@ -16,6 +16,7 @@ import Fabrics from "./pages/Fabrics/Fabrics";
 import EnhancedCoupons from "./pages/Coupons/EnhancedCoupons";
 import Occasions from "./pages/Occasions/Occasions";
 import BanarasRoyale from "./pages/BanarasRoyale/BanarasRoyale";
+import BoxSection from "./pages/BoxSection/BoxSection";
 import Orders from "./pages/Orders/Orders";
 import Inventory from "./pages/Inventory/Inventory";
 import Reviews from "./pages/Reviews/Reviews";
@@ -46,6 +47,7 @@ export default function App() {
           <Route path="/coupons" element={<ProtectedRoute><EnhancedCoupons /></ProtectedRoute>} />
           <Route path="/occasions" element={<ProtectedRoute><Occasions /></ProtectedRoute>} />
           <Route path="/royale" element={<ProtectedRoute><BanarasRoyale /></ProtectedRoute>} />
+          <Route path="/box-section" element={<ProtectedRoute><BoxSection /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
           <Route path="/cancellations" element={<ProtectedRoute><OrderActions type="cancel" /></ProtectedRoute>} />
           <Route path="/returns" element={<ProtectedRoute><OrderActions type="return" /></ProtectedRoute>} />

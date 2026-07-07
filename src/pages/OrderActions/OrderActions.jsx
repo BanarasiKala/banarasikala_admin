@@ -176,6 +176,12 @@ export default function OrderActions({ type = "return" }) {
                 <td className="px-5 py-4">
                   <div className="font-semibold text-[#4A3F35]">{row.OrderItem?.product_name || row.OrderItem?.Product?.name}</div>
                   <div className="text-[10px] text-gray-400">{row.OrderItem?.sku}</div>
+                  {type === "exchange" && (row.meta?.exchange_color_name || row.meta?.exchange_color_id) && (
+                    <div className="mt-1 text-[10px] font-bold text-[#800020]">
+                      Send colour: {row.meta.exchange_color_name || `#${row.meta.exchange_color_id}`}
+                      {row.OrderItem?.Color?.name ? ` (was ${row.OrderItem.Color.name})` : ""}
+                    </div>
+                  )}
                 </td>
                 <td className="px-5 py-4 font-bold">{row.quantity}</td>
                 <td className="px-5 py-4">

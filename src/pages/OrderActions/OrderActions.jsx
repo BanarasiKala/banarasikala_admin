@@ -173,13 +173,31 @@ export default function OrderActions({ type = "return" }) {
                   <div className="font-semibold text-[#4A3F35]">{row.Order?.customer_name}</div>
                   <div className="text-[10px] text-gray-400">{row.Order?.customer_email}</div>
                 </td>
+                {/* One request = one row, however many products it covers. */}
                 <td className="px-5 py-4">
-                  <div className="font-semibold text-[#4A3F35]">{row.OrderItem?.product_name || row.OrderItem?.Product?.name}</div>
-                  <div className="text-[10px] text-gray-400">{row.OrderItem?.sku}</div>
-                  {type === "exchange" && (row.meta?.exchange_color_name || row.meta?.exchange_color_id) && (
-                    <div className="mt-1 text-[10px] font-bold text-[#800020]">
-                      Send colour: {row.meta.exchange_color_name || `#${row.meta.exchange_color_id}`}
-                      {row.OrderItem?.Color?.name ? ` (was ${row.OrderItem.Color.name})` : ""}
+                  <div className="space-y-2">
+                    {(row.items || []).map((line) => (
+                      <div key={line.action_id}>
+                        <div className="font-semibold text-[#4A3F35]">
+                          {line.OrderItem?.product_name || line.OrderItem?.Product?.name}
+                          {line.quantity > 1 && <span className="text-gray-400"> × {line.quantity}</span>}
+                        </div>
+                        <div className="text-[10px] text-gray-400">
+                          {line.OrderItem?.sku}
+                          {(row.items || []).length > 1 && ` · ${formatMoney(line.estimated_refund_amount)}`}
+                        </div>
+                        {type === "exchange" && (line.meta?.exchange_color_name || line.meta?.exchange_color_id) && (
+                          <div className="mt-1 text-[10px] font-bold text-[#800020]">
+                            Send colour: {line.meta.exchange_color_name || `#${line.meta.exchange_color_id}`}
+                            {line.OrderItem?.Color?.name ? ` (was ${line.OrderItem.Color.name})` : ""}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {(row.items || []).length > 1 && (
+                    <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-[#800020]/70">
+                      {row.items.length} products · one request
                     </div>
                   )}
                 </td>

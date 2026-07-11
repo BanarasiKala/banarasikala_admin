@@ -98,6 +98,27 @@ export default function OrderActions({ type = "return" }) {
     }
   };
 
+  // Goods move ONLY here: books the replacement's forward shipment and pushes
+  // it to ShipRocket. Completing an exchange (here or automatically via the
+  // courier's RETURN DELIVERED webhook) just records the old item is back.
+  const shipReplacement = async (id) => {
+    setSavingId(id);
+    setError("");
+    try {
+      const response = await fetch(`${API_ENDPOINTS.orders}/admin/item-actions/${id}/ship-replacement`, {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to ship the replacement.");
+      await loadRows();
+    } catch (err) {
+      setError(err.message || "Unable to ship the replacement.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <section className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -278,6 +299,35 @@ export default function OrderActions({ type = "return" }) {
                       <span className="rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase text-green-700">
                         <CheckCircle2 className="mr-1 inline h-3 w-3" /> Refund Initiated
                       </span>
+                    )}
+                    {type === "exchange" && row.status === "Completed" && !row.replacement_shipment_id && (
+                      <button
+                        type="button"
+                        disabled={savingId === row.id}
+                        onClick={() => shipReplacement(row.id)}
+                        className="rounded bg-[#800020] px-3 py-1.5 text-[10px] font-bold uppercase text-white"
+                      >
+                        <RefreshCw className="mr-1 inline h-3 w-3" />
+                        {savingId === row.id ? "Shipping..." : "Ship Replacement"}
+                      </button>
+                    )}
+                    {type === "exchange" && row.status === "Completed" && row.replacement_shipment_id && row.replacement_booked && (
+                      <span className="rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase text-green-700">
+                        <CheckCircle2 className="mr-1 inline h-3 w-3" />
+                        {row.replacement_awb ? `Replacement Shipped (${row.replacement_awb})` : "Replacement Booked — AWB Pending"}
+                      </span>
+                    )}
+                    {type === "exchange" && row.status === "Completed" && row.replacement_shipment_id && !row.replacement_booked && (
+                      <button
+                        type="button"
+                        disabled={savingId === row.id}
+                        onClick={() => shipReplacement(row.id)}
+                        className="rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-[10px] font-bold uppercase text-amber-700"
+                        title="Courier booking failed earlier — the shipment record exists, retry to book it."
+                      >
+                        <RefreshCw className="mr-1 inline h-3 w-3" />
+                        {savingId === row.id ? "Retrying..." : "Booking Failed — Retry"}
+                      </button>
                     )}
                   </div>
                 </td>

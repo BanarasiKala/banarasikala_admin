@@ -186,10 +186,26 @@ export default function OrderActions({ type = "return" }) {
                           {line.OrderItem?.sku}
                           {(row.items || []).length > 1 && ` · ${formatMoney(line.estimated_refund_amount)}`}
                         </div>
-                        {type === "exchange" && (line.meta?.exchange_color_name || line.meta?.exchange_color_id) && (
-                          <div className="mt-1 text-[10px] font-bold text-[#800020]">
-                            Send colour: {line.meta.exchange_color_name || `#${line.meta.exchange_color_id}`}
-                            {line.OrderItem?.Color?.name ? ` (was ${line.OrderItem.Color.name})` : ""}
+                        {/* What to actually pack. An exchange may swap the COLOUR, or the whole
+                            PRODUCT for a different saree at exactly the same price — the packer
+                            needs to see both, and what it replaces. */}
+                        {type === "exchange" && (line.meta?.exchange_product_id || line.meta?.exchange_color_id) && (
+                          <div className="mt-1 rounded bg-[#800020]/5 px-2 py-1.5 text-[10px] leading-relaxed text-[#800020]">
+                            <span className="font-bold uppercase tracking-wider">Send</span>{" "}
+                            <span className="font-bold">
+                              {line.meta.exchange_product_name || line.OrderItem?.product_name}
+                              {line.meta?.exchange_color_name ? ` · ${line.meta.exchange_color_name}` : ""}
+                            </span>
+                            {line.meta?.exchange_product_id && (
+                              <div className="mt-0.5 text-[#4A3F35]/60">
+                                replaces {line.meta.original_product_name || line.OrderItem?.product_name}
+                                {line.OrderItem?.Color?.name ? ` · ${line.OrderItem.Color.name}` : ""}
+                                {" "}(same price)
+                              </div>
+                            )}
+                            {!line.meta?.exchange_product_id && line.OrderItem?.Color?.name && (
+                              <div className="mt-0.5 text-[#4A3F35]/60">was {line.OrderItem.Color.name}</div>
+                            )}
                           </div>
                         )}
                       </div>

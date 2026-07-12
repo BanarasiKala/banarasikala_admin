@@ -16,6 +16,26 @@ const ACTION_ICONS = {
 
 const formatMoney = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
 
+// What an exchange must SHIP, as a list. Mirrors utils/exchangeTargets.js on the backend:
+// current rows carry meta.exchange_targets; earlier rows carry a single
+// exchange_product_id/exchange_color_id; a like-for-like swap carries neither.
+const exchangeTargetsOf = (line) => {
+  const meta = line?.meta || {};
+  if (Array.isArray(meta.exchange_targets) && meta.exchange_targets.length) {
+    return meta.exchange_targets;
+  }
+  if (meta.exchange_product_id || meta.exchange_color_id) {
+    return [{
+      product_id: meta.exchange_product_id || line?.OrderItem?.product_id,
+      product_name: meta.exchange_product_name || line?.OrderItem?.product_name,
+      color_id: meta.exchange_color_id ?? null,
+      color_name: meta.exchange_color_name || null,
+      quantity: line?.quantity || 1,
+    }];
+  }
+  return [];
+};
+
 const ACTION_STATUSES = ["all", "Initiated", "Completed", "Rejected", "Cancelled"];
 
 const authHeaders = () => ({
@@ -207,26 +227,26 @@ export default function OrderActions({ type = "return" }) {
                           {line.OrderItem?.sku}
                           {(row.items || []).length > 1 && ` · ${formatMoney(line.estimated_refund_amount)}`}
                         </div>
-                        {/* What to actually pack. An exchange may swap the COLOUR, or the whole
-                            PRODUCT for a different saree at exactly the same price — the packer
-                            needs to see both, and what it replaces. */}
-                        {type === "exchange" && (line.meta?.exchange_product_id || line.meta?.exchange_color_id) && (
+                        {/* The pack list. One exchanged line can be swapped for SEVERAL sarees
+                            (2 × A + 1 × B), all at the price paid — so this is a list, and its
+                            quantities sum to the quantity coming back. The order line itself is
+                            never rewritten, so this meta is the ONLY record of the swap. */}
+                        {type === "exchange" && (exchangeTargetsOf(line).length > 0) && (
                           <div className="mt-1 rounded bg-[#800020]/5 px-2 py-1.5 text-[10px] leading-relaxed text-[#800020]">
-                            <span className="font-bold uppercase tracking-wider">Send</span>{" "}
-                            <span className="font-bold">
-                              {line.meta.exchange_product_name || line.OrderItem?.product_name}
-                              {line.meta?.exchange_color_name ? ` · ${line.meta.exchange_color_name}` : ""}
-                            </span>
-                            {line.meta?.exchange_product_id && (
-                              <div className="mt-0.5 text-[#4A3F35]/60">
-                                replaces {line.meta.original_product_name || line.OrderItem?.product_name}
-                                {line.OrderItem?.Color?.name ? ` · ${line.OrderItem.Color.name}` : ""}
-                                {" "}(same price)
-                              </div>
-                            )}
-                            {!line.meta?.exchange_product_id && line.OrderItem?.Color?.name && (
-                              <div className="mt-0.5 text-[#4A3F35]/60">was {line.OrderItem.Color.name}</div>
-                            )}
+                            <span className="font-bold uppercase tracking-wider">Send</span>
+                            <ul className="mt-0.5 space-y-0.5">
+                              {exchangeTargetsOf(line).map((t, i) => (
+                                <li key={`${t.product_id}-${t.color_id ?? "x"}-${i}`} className="font-bold">
+                                  {t.quantity} × {t.product_name || `Product #${t.product_id}`}
+                                  {t.color_name ? ` · ${t.color_name}` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                            <div className="mt-1 text-[#4A3F35]/60">
+                              replaces {line.quantity} × {line.meta?.original_product_name || line.OrderItem?.product_name}
+                              {line.OrderItem?.Color?.name ? ` · ${line.OrderItem.Color.name}` : ""}
+                              {" "}(same price)
+                            </div>
                           </div>
                         )}
                       </div>

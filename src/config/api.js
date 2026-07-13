@@ -16,6 +16,7 @@ export const API_ENDPOINTS = {
   royale: `${API_BASE_URL}/api/royale`,
   boxSections: `${API_BASE_URL}/api/box-sections`,
   auth: `${API_BASE_URL}/api/auth`,
+  support: `${API_BASE_URL}/api/support`,
 };
 
 export default API_ENDPOINTS;

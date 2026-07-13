@@ -20,6 +20,7 @@ import BoxSection from "./pages/BoxSection/BoxSection";
 import Orders from "./pages/Orders/Orders";
 import Inventory from "./pages/Inventory/Inventory";
 import Reviews from "./pages/Reviews/Reviews";
+import Tickets from "./pages/Tickets/Tickets";
 import Reels from "./pages/Reels/Reels";
 import Analytics from "./pages/Analytics/Analytics";
 import Payments from "./pages/Payments/Payments";
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/exchanges" element={<ProtectedRoute><OrderActions type="exchange" /></ProtectedRoute>} />
           <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
           <Route path="/reviews" element={<ProtectedRoute><Reviews /></ProtectedRoute>} />
+          <Route path="/tickets" element={<ProtectedRoute><Tickets /></ProtectedRoute>} />
           <Route path="/reels" element={<ProtectedRoute><Reels /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
           <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />

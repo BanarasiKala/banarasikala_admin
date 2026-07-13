@@ -14,6 +14,7 @@ import {
   ArrowUpDown,
   PackageCheck,
   MessageSquareText,
+  LifeBuoy,
   BarChart3,
   CreditCard,
   LogOut,
@@ -44,6 +45,7 @@ const navItems = [
   { id: "exchanges", label: "Exchanges", icon: RefreshCw },
   { id: "inventory", label: "Inventory", icon: PackageCheck },
   { id: "reviews", label: "Reviews", icon: MessageSquareText, badge: 4 },
+  { id: "tickets", label: "Support Tickets", subtext: "(Customer conversations)", icon: LifeBuoy },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "payments", label: "Payments", icon: CreditCard },
 ];

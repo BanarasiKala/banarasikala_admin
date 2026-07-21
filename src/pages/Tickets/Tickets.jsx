@@ -13,6 +13,7 @@ import {
   Phone,
 } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
+import useSupportStream, { useTypingPing } from "../../hooks/useSupportStream";
 
 const STATUSES = ["Open", "In Progress", "Resolved", "Closed"];
 
@@ -70,6 +71,11 @@ export default function Tickets() {
   const [sending, setSending] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [error, setError] = useState("");
+  // Live state: ephemeral typing flag for the open thread, the customer's read watermark,
+  // and a transient toast when a brand-new ticket arrives while the inbox is on screen.
+  const [customerTyping, setCustomerTyping] = useState(false);
+  const [customerReadAt, setCustomerReadAt] = useState(null);
+  const [toast, setToast] = useState(null);
   const threadEndRef = useRef(null);
 
   // The fetchers never touch state before their first await — the "loading" flips live in the
@@ -98,6 +104,10 @@ export default function Tickets() {
       const response = await fetch(`${API_ENDPOINTS.support}/tickets/${id}`, { headers: authHeaders() });
       const data = await response.json();
       setThread(response.ok ? data : null);
+      // Seed the read watermark here rather than in an effect keyed on `thread` — that
+      // would be a synchronous setState reacting to state we just set. Stream `read`
+      // events update it from here on.
+      setCustomerReadAt(response.ok ? (data?.customer_read_at || null) : null);
       if (!response.ok) setError(data?.message || "Unable to open this ticket.");
     } catch {
       setThread(null);
@@ -119,13 +129,108 @@ export default function Tickets() {
     setThread(null);
     setThreadLoading(true);
     setReply("");
+    setCustomerTyping(false);
+    // Opening clears the unread badge locally and tells the customer we've seen it.
+    setTickets((rows) => rows.map((t) => (t.id === id ? { ...t, unread_count: 0 } : t)));
+    fetch(`${API_ENDPOINTS.support}/tickets/${id}/read`, {
+      method: "POST",
+      headers: authHeaders(),
+    }).catch(() => {});
   };
 
   const closeThread = () => {
     setActiveId(null);
     setThread(null);
     setReply("");
+    setCustomerTyping(false);
   };
+
+  // ── Realtime ──────────────────────────────────────────────────────────────────────
+  // Two streams, deliberately: the inbox firehose is always on so new tickets and unread
+  // counts stay live even with no thread open, and a per-ticket stream carries the
+  // typing/read/message detail for the thread actually on screen.
+
+  // The inbox handler needs to know which thread is open (so it doesn't badge the one
+  // being read). A ref rather than a dependency: closing over activeId directly would
+  // resubscribe the firehose on every thread switch, and events land in that gap.
+  const activeIdRef = useRef(activeId);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+
+  useSupportStream(`${API_ENDPOINTS.support}/stream/admin`, (event) => {
+    switch (event.type) {
+      case "ticket_created":
+        setTickets((rows) => (rows.some((t) => t.id === event.ticket.id)
+          ? rows
+          : [event.ticket, ...rows]));
+        setToast(`New ticket ${event.ticket.ticket_number} — ${event.ticket.category}`);
+        break;
+      case "message":
+        // Bump the row to the top (the list is sorted by last activity) and badge it,
+        // unless it's the thread already open in front of us.
+        setTickets((rows) => {
+          const row = rows.find((t) => t.id === event.ticket_id);
+          if (!row) return rows;
+          const bumped = {
+            ...row,
+            message_count: (row.message_count || 0) + 1,
+            awaiting_reply: event.message.sender === "customer",
+            unread_count: event.message.sender === "customer" && event.ticket_id !== activeIdRef.current
+              ? (row.unread_count || 0) + 1
+              : row.unread_count || 0,
+          };
+          return [bumped, ...rows.filter((t) => t.id !== event.ticket_id)];
+        });
+        break;
+      case "status":
+        setTickets((rows) => rows.map((t) => (
+          t.id === event.ticket_id ? { ...t, status: event.status } : t
+        )));
+        break;
+      default:
+        break;
+    }
+  });
+
+  useSupportStream(
+    activeId ? `${API_ENDPOINTS.support}/tickets/${activeId}/stream` : null,
+    (event) => {
+      switch (event.type) {
+        case "message":
+          setThread((current) => {
+            if (!current) return current;
+            const messages = current.messages || [];
+            // The stream echoes to everyone including the sender — skip what we already have.
+            if (messages.some((m) => String(m.id) === String(event.message.id))) return current;
+            return { ...current, messages: [...messages, event.message] };
+          });
+          // A customer message arriving in the thread we're reading is read on arrival.
+          if (event.message.sender === "customer") {
+            fetch(`${API_ENDPOINTS.support}/tickets/${activeId}/read`, {
+              method: "POST",
+              headers: authHeaders(),
+            }).catch(() => {});
+          }
+          break;
+        case "typing":
+          if (event.side === "customer") setCustomerTyping(Boolean(event.typing));
+          break;
+        case "read":
+          if (event.side === "customer") setCustomerReadAt(event.read_at);
+          break;
+        default:
+          break;
+      }
+    },
+  );
+
+  const pingTyping = useTypingPing(activeId);
+
+  // Auto-dismiss the new-ticket toast.
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   /* eslint-disable react-hooks/set-state-in-effect --
      Both fetchers reach their first await before touching state, so nothing here re-renders
@@ -136,9 +241,11 @@ export default function Tickets() {
   }, [activeId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  // Also on the typing bubble appearing — it adds height below the last message and would
+  // otherwise be clipped below the fold.
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ block: "nearest" });
-  }, [thread?.messages?.length]);
+  }, [thread?.messages?.length, customerTyping]);
 
   const sendReply = async (event) => {
     event.preventDefault();
@@ -204,6 +311,27 @@ export default function Tickets() {
 
   return (
     <div className="space-y-4">
+      {/* New-ticket toast. Fires from the inbox stream, so it appears whether or not a
+          thread is open — the point is to notice a ticket arriving while you're reading
+          another one. Auto-dismisses after 6s; clicking opens the ticket. */}
+      {toast && (
+        <div
+          role="status"
+          className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl bg-[#800020] text-white shadow-lg text-sm font-semibold animate-in fade-in slide-in-from-top-2"
+        >
+          <MessageSquareText className="w-4 h-4 shrink-0" />
+          <span>{toast}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="ml-1 text-white/70 hover:text-white"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="brand-font text-2xl font-bold text-[#800020] flex items-center gap-2">
@@ -278,9 +406,23 @@ export default function Tickets() {
                     <Package className="w-3 h-3" />
                     #{ticket.order_number || ticket.order_id} · {ticket.message_count} msg
                   </span>
-                  {ticket.awaiting_reply && ticket.status !== "Closed" && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-[#800020] text-white">Reply needed</span>
-                  )}
+                  <span className="inline-flex items-center gap-1.5">
+                    {/* Unread = customer messages newer than this admin's read watermark.
+                        Distinct from "Reply needed", which is about whose turn it is: a
+                        ticket can need a reply without being unread (already read, not yet
+                        answered). */}
+                    {ticket.unread_count > 0 && (
+                      <span
+                        className="min-w-[16px] px-1 py-0.5 rounded-full bg-[#087a55] text-white text-center"
+                        title={`${ticket.unread_count} unread`}
+                      >
+                        {ticket.unread_count > 9 ? "9+" : ticket.unread_count}
+                      </span>
+                    )}
+                    {ticket.awaiting_reply && ticket.status !== "Closed" && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-[#800020] text-white">Reply needed</span>
+                    )}
+                  </span>
                 </div>
               </button>
             ))
@@ -354,8 +496,15 @@ export default function Tickets() {
               )}
 
               <div className="p-4 space-y-3 max-h-[52vh] overflow-y-auto custom-scrollbar bg-[#FCFBFA]">
-                {(thread.messages || []).map((message) => {
+                {(thread.messages || []).map((message, index) => {
                   const isAdmin = message.sender === "admin";
+                  // "Seen" only under OUR last message — under every bubble it's noise, and
+                  // under a customer's own message it means nothing.
+                  const messages = thread.messages || [];
+                  const isLastOwn = isAdmin
+                    && !messages.slice(index + 1).some((m) => m.sender === "admin");
+                  const seen = isLastOwn && customerReadAt
+                    && new Date(customerReadAt) >= new Date(message.createdAt);
                   return (
                     <div key={message.id} className={`flex ${isAdmin ? "justify-end" : "justify-start"}`}>
                       <div
@@ -373,11 +522,31 @@ export default function Tickets() {
                         </p>
                         <span className="block mt-1 text-[10px] font-semibold text-[#4A3F35]/40 text-right">
                           {formatStamp(message.createdAt)}
+                          {seen && (
+                            <span className="ml-1.5 font-bold text-[#087a55]" title="Seen by customer">
+                              ✓✓ Seen
+                            </span>
+                          )}
                         </span>
                       </div>
                     </div>
                   );
                 })}
+
+                {customerTyping && (
+                  <div className="flex justify-start">
+                    <div className="px-3 py-2 rounded-xl rounded-bl-sm border bg-white border-[#D4AF37]/25">
+                      <span className="block text-[10px] font-bold text-[#800020]">
+                        {activeRow?.name || "Customer"}
+                      </span>
+                      <span className="mt-1 flex items-center gap-1 h-[18px]" aria-live="polite">
+                        <i className="w-1.5 h-1.5 rounded-full bg-[#4A3F35]/40 animate-bounce" />
+                        <i className="w-1.5 h-1.5 rounded-full bg-[#4A3F35]/40 animate-bounce [animation-delay:150ms]" />
+                        <i className="w-1.5 h-1.5 rounded-full bg-[#4A3F35]/40 animate-bounce [animation-delay:300ms]" />
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div ref={threadEndRef} />
               </div>
 
@@ -387,7 +556,7 @@ export default function Tickets() {
                     rows={2}
                     value={reply}
                     maxLength={2000}
-                    onChange={(event) => setReply(event.target.value)}
+                    onChange={(event) => { setReply(event.target.value); pingTyping(); }}
                     placeholder="Reply to the customer…"
                     className="flex-1 px-3 py-2 rounded-lg border border-[#D4AF37]/30 text-[13px] text-[#4A3F35] outline-none focus:border-[#800020] resize-y"
                   />

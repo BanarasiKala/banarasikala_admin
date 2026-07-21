@@ -6,6 +6,8 @@ import {
   ArrowLeft,
   CircleDot,
   CheckCircle2,
+  Check,
+  CheckCheck,
   Lock,
   Clock,
   Package,
@@ -14,6 +16,32 @@ import {
 } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
 import useSupportStream, { useTypingPing } from "../../hooks/useSupportStream";
+
+/**
+ * WhatsApp-style delivery state for one of OUR (support's) messages.
+ *
+ *   ✓        sent      — saved on the server
+ *   ✓✓ grey  delivered — reached the customer's browser
+ *   ✓✓ blue  read      — the customer opened the thread past this message
+ *
+ * Read is derived from the customer's watermark rather than stored per message: one
+ * timestamp answers it for the whole thread and can only move forward.
+ */
+const MessageTicks = ({ message, readAt }) => {
+  const read = readAt && new Date(readAt) >= new Date(message.createdAt);
+  const delivered = Boolean(message.delivered_at);
+  const label = read ? "Read" : delivered ? "Delivered" : "Sent";
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={`inline-flex items-center leading-none ${read ? "text-[#1da1f2]" : "text-[#4A3F35]/40"}`}
+    >
+      {read || delivered ? <CheckCheck className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
+    </span>
+  );
+};
 
 const STATUSES = ["Open", "In Progress", "Resolved", "Closed"];
 
@@ -216,6 +244,19 @@ export default function Tickets() {
           break;
         case "read":
           if (event.side === "customer") setCustomerReadAt(event.read_at);
+          break;
+        case "delivered":
+          // ✓ -> ✓✓ on the messages that just reached the customer's browser.
+          setThread((current) => {
+            if (!current) return current;
+            const ids = new Set((event.ids || []).map(String));
+            return {
+              ...current,
+              messages: (current.messages || []).map((m) => (
+                ids.has(String(m.id)) ? { ...m, delivered_at: event.delivered_at } : m
+              )),
+            };
+          });
           break;
         default:
           break;
@@ -496,15 +537,8 @@ export default function Tickets() {
               )}
 
               <div className="p-4 space-y-3 max-h-[52vh] overflow-y-auto custom-scrollbar bg-[#FCFBFA]">
-                {(thread.messages || []).map((message, index) => {
+                {(thread.messages || []).map((message) => {
                   const isAdmin = message.sender === "admin";
-                  // "Seen" only under OUR last message — under every bubble it's noise, and
-                  // under a customer's own message it means nothing.
-                  const messages = thread.messages || [];
-                  const isLastOwn = isAdmin
-                    && !messages.slice(index + 1).some((m) => m.sender === "admin");
-                  const seen = isLastOwn && customerReadAt
-                    && new Date(customerReadAt) >= new Date(message.createdAt);
                   return (
                     <div key={message.id} className={`flex ${isAdmin ? "justify-end" : "justify-start"}`}>
                       <div
@@ -520,13 +554,9 @@ export default function Tickets() {
                         <p className="mt-0.5 text-[13px] text-[#4A3F35] leading-relaxed whitespace-pre-wrap break-words">
                           {message.message}
                         </p>
-                        <span className="block mt-1 text-[10px] font-semibold text-[#4A3F35]/40 text-right">
+                        <span className="mt-1 flex items-center justify-end gap-1 text-[10px] font-semibold text-[#4A3F35]/40">
                           {formatStamp(message.createdAt)}
-                          {seen && (
-                            <span className="ml-1.5 font-bold text-[#087a55]" title="Seen by customer">
-                              ✓✓ Seen
-                            </span>
-                          )}
+                          {isAdmin && <MessageTicks message={message} readAt={customerReadAt} />}
                         </span>
                       </div>
                     </div>

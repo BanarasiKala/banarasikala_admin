@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
 import useSupportStream, { useTypingPing } from "../../hooks/useSupportStream";
+import ImageLightbox from "../../components/ImageLightbox";
 
 /**
  * WhatsApp-style delivery state for one of OUR (support's) messages.
@@ -97,6 +98,8 @@ export default function Tickets() {
   const [threadLoading, setThreadLoading] = useState(false);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+  // { images, index } while the full-screen viewer is open, null otherwise.
+  const [lightbox, setLightbox] = useState(null);
   const [statusSaving, setStatusSaving] = useState(false);
   const [error, setError] = useState("");
   // Live state: ephemeral typing flag for the open thread, the customer's read watermark,
@@ -551,9 +554,40 @@ export default function Tickets() {
                         <span className="block text-[10px] font-bold text-[#800020]">
                           {isAdmin ? (message.sender_name || "Support") : (message.sender_name || "Customer")}
                         </span>
-                        <p className="mt-0.5 text-[13px] text-[#4A3F35] leading-relaxed whitespace-pre-wrap break-words">
-                          {message.message}
-                        </p>
+
+                        {/* Photos the customer attached. They open in the in-page viewer:
+                            a damaged saree cannot be judged from a thumbnail, and a new tab
+                            would take support away from the thread describing it. */}
+                        {message.attachments?.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {message.attachments.map((image, imageIndex) => (
+                              <button
+                                type="button"
+                                key={image.url}
+                                onClick={() => setLightbox({ images: message.attachments, index: imageIndex })}
+                                aria-label="View photo"
+                                className="block p-0 border border-[#D4AF37]/30 rounded-lg overflow-hidden cursor-zoom-in bg-[#F5F1ED]"
+                              >
+                                <img
+                                  src={image.url}
+                                  alt="Ticket attachment"
+                                  loading="lazy"
+                                  /* Natural aspect ratio, capped: a portrait saree shot
+                                     cropped to a square loses the defect being reported. */
+                                  className="block w-auto h-auto max-w-[180px] max-h-[160px]"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* An image-only message has no text; an empty <p> would leave a
+                            stray gap under the photos. */}
+                        {message.message && (
+                          <p className="mt-0.5 text-[13px] text-[#4A3F35] leading-relaxed whitespace-pre-wrap break-words">
+                            {message.message}
+                          </p>
+                        )}
                         <span className="mt-1 flex items-center justify-end gap-1 text-[10px] font-semibold text-[#4A3F35]/40">
                           {formatStamp(message.createdAt)}
                           {isAdmin && <MessageTicks message={message} readAt={customerReadAt} />}
@@ -609,6 +643,14 @@ export default function Tickets() {
           )}
         </div>
       </div>
+
+      {lightbox && (
+        <ImageLightbox
+          images={lightbox.images}
+          startIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
   );
 }

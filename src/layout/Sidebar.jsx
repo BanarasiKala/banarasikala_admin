@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../config/api";
+import { scrollContentToTop } from "../utils/scrollToTop";
 import {
   LayoutDashboard,
   LayoutGrid,
@@ -75,6 +76,10 @@ export default function Sidebar({ currentSection, isOpen, onClose }) {
   const handleNavClick = () => {
     // Close sidebar on mobile after navigation
     if (window.innerWidth < 768) onClose();
+    // Layout already scrolls to top on a route CHANGE. This covers re-clicking the section
+    // you're already in — the pathname doesn't change, so that effect never fires, and a
+    // customer who scrolled halfway down Products would otherwise see nothing happen.
+    scrollContentToTop({ smooth: true });
   };
 
   return (
@@ -93,10 +98,12 @@ export default function Sidebar({ currentSection, isOpen, onClose }) {
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
           md:relative md:translate-x-0 md:z-auto
+          h-full min-h-0
         `}
       >
-        {/* Header with close button on mobile */}
-        <div className="p-6 mb-2 border-b border-[#D4AF37]/10 flex items-center justify-between">
+        {/* shrink-0 on the header and footer: without it flexbox shrinks them to make room
+            for the nav's content, squashing the brand block instead of scrolling the list. */}
+        <div className="p-6 mb-2 border-b border-[#D4AF37]/10 flex items-center justify-between shrink-0">
           <div className="flex flex-col">
             <span className="brand-font text-2xl font-bold tracking-tighter text-[#800020]">
               Banaras Kala
@@ -113,7 +120,10 @@ export default function Sidebar({ currentSection, isOpen, onClose }) {
           </button>
         </div>
 
-        <nav className="flex-1 space-y-0.5 px-2 overflow-y-auto custom-scrollbar pt-4">
+        {/* The scroll region. min-h-0 is what actually lets it scroll: a flex item's
+            automatic minimum size is its content, so without it the nav refuses to shrink
+            below its full 21-item height and overflows the sidebar instead. */}
+        <nav className="flex-1 min-h-0 space-y-0.5 px-2 overflow-y-auto overscroll-contain custom-scrollbar pt-4">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentSection === item.id;
@@ -145,7 +155,9 @@ export default function Sidebar({ currentSection, isOpen, onClose }) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-[#D4AF37]/10">
+        {/* Pinned below the scrolling list — Logout must never be something you have to
+            scroll to find. pb accounts for the iOS home indicator. */}
+        <div className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-[#D4AF37]/10 shrink-0">
           <button
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-[#800020]/20 text-[#800020] rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-[#800020] hover:text-white transition-all"

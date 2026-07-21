@@ -38,6 +38,24 @@ body {
   transform: translateY(-2px);
 }
 
+/* The admin shell is pinned to the viewport; the sidebar nav and the content area are the
+   two things that scroll. Written here rather than as a Tailwind `h-screen`/`h-dvh` because
+   Tailwind is loaded from the CDN and the dvh utilities aren't guaranteed to be present —
+   the two-declaration fallback works on every version. */
+.admin-shell {
+  height: 100vh;
+  /* dvh tracks the *visible* viewport, so a mobile browser collapsing its toolbar doesn't
+     leave the sidebar's Logout button stranded under the chrome. */
+  height: 100dvh;
+}
+
+/* Firefox has no ::-webkit-scrollbar; without this the sidebar scrollbar is the default
+   chunky one and steals ~15px from a 256px column. */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) var(--beige);
+}
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
   height: 4px;

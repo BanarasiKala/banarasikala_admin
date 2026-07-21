@@ -27,8 +27,24 @@ import {
   X,
 } from "lucide-react";
 
+// Order here is the sidebar's order. Daily work comes first: Orders through Support
+// Tickets sit directly under Dashboard, because those are the screens someone running the
+// shop opens every day and they should never need a scroll to reach. Catalogue and
+// storefront setup — varieties, fabrics, products, arrangement — is configured once and
+// revisited occasionally, so it moves below.
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+
+  // ── Daily operations ──
+  { id: "orders", label: "Orders", icon: Box },
+  { id: "cancellations", label: "Cancellations", icon: XCircle },
+  { id: "returns", label: "Returns", icon: RotateCcw },
+  { id: "exchanges", label: "Exchanges", icon: RefreshCw },
+  { id: "inventory", label: "Inventory", icon: PackageCheck },
+  { id: "reviews", label: "Reviews", icon: MessageSquareText, badge: 4 },
+  { id: "tickets", label: "Support Tickets", subtext: "(Customer conversations)", icon: LifeBuoy },
+
+  // ── Catalogue, storefront & the rest ──
   { id: "varieties", label: "Varieties", subtext: "(Katan, Kadhwa, Tissue)", icon: GitBranch },
   { id: "fabrics", label: "Fabrics / Materials", subtext: "(Silk, Georgette, etc.)", icon: FileBadge },
   { id: "occasions", label: "Occasions", subtext: "(Wedding, Festival, etc.)", icon: Sparkles },
@@ -40,13 +56,6 @@ const navItems = [
   { id: "box-section", label: "Box Section", subtext: "(Home media mosaic)", icon: LayoutGrid },
   { id: "arrange", label: "Arrange Storefront", subtext: "(Order on home & collection)", icon: ArrowUpDown },
   { id: "users", label: "User Management", icon: Users },
-  { id: "orders", label: "Orders", icon: Box },
-  { id: "cancellations", label: "Cancellations", icon: XCircle },
-  { id: "returns", label: "Returns", icon: RotateCcw },
-  { id: "exchanges", label: "Exchanges", icon: RefreshCw },
-  { id: "inventory", label: "Inventory", icon: PackageCheck },
-  { id: "reviews", label: "Reviews", icon: MessageSquareText, badge: 4 },
-  { id: "tickets", label: "Support Tickets", subtext: "(Customer conversations)", icon: LifeBuoy },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "payments", label: "Payments", icon: CreditCard },
 ];

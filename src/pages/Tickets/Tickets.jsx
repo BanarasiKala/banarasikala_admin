@@ -44,6 +44,33 @@ const MessageTicks = ({ message, readAt }) => {
   );
 };
 
+/**
+ * Receipts only ever move forward.
+ *
+ * The thread is refetched after a reply, to pick up the status the server assigned. That GET
+ * is issued the moment the POST returns — before the customer's browser has run the effect
+ * that marks the new message read — yet it resolves AFTER the `read` event that POST went on
+ * to raise. Assigning its payload therefore hands back the pre-read watermark, and the tick
+ * drops from blue to grey a beat after turning blue, with nothing left to re-raise it.
+ *
+ * Taking the later of the two keeps the ticks monotonic whichever response wins the race.
+ * A ticket switch is not a race — openTicket clears the watermark, so nothing carries across.
+ */
+const laterRead = (current, incoming) => {
+  if (!incoming) return current || null;
+  if (!current) return incoming;
+  return new Date(incoming) > new Date(current) ? incoming : current;
+};
+
+// The same rule per message: a delivered stamp already on screen outlives a refetch whose
+// snapshot predates it.
+const keepReceipts = (current, incoming = []) => {
+  const known = new Map((current?.messages || []).map((m) => [String(m.id), m.delivered_at]));
+  return incoming.map((m) => (
+    m.delivered_at ? m : { ...m, delivered_at: known.get(String(m.id)) || null }
+  ));
+};
+
 const STATUSES = ["Open", "In Progress", "Resolved", "Closed"];
 
 const FILTERS = [
@@ -134,14 +161,21 @@ export default function Tickets() {
     try {
       const response = await fetch(`${API_ENDPOINTS.support}/tickets/${id}`, { headers: authHeaders() });
       const data = await response.json();
-      setThread(response.ok ? data : null);
+      if (!response.ok) {
+        setThread(null);
+        setCustomerReadAt(null);
+        setError(data?.message || "Unable to open this ticket.");
+        return;
+      }
       // Seed the read watermark here rather than in an effect keyed on `thread` — that
       // would be a synchronous setState reacting to state we just set. Stream `read`
-      // events update it from here on.
-      setCustomerReadAt(response.ok ? (data?.customer_read_at || null) : null);
-      if (!response.ok) setError(data?.message || "Unable to open this ticket.");
+      // events update it from here on. Merged rather than assigned, because this response
+      // can be older than an event that has already landed — see laterRead.
+      setThread((current) => ({ ...data, messages: keepReceipts(current, data.messages) }));
+      setCustomerReadAt((current) => laterRead(current, data?.customer_read_at));
     } catch {
       setThread(null);
+      setCustomerReadAt(null);
       setError("Unable to open this ticket.");
     } finally {
       setThreadLoading(false);
@@ -153,6 +187,7 @@ export default function Tickets() {
     setLoading(true);
     setActiveId(null);
     setThread(null);
+    setCustomerReadAt(null);
   };
 
   const openTicket = (id) => {
@@ -161,6 +196,10 @@ export default function Tickets() {
     setThreadLoading(true);
     setReply("");
     setCustomerTyping(false);
+    // The watermark belongs to the thread being left. Clearing it is what makes the merge in
+    // fetchThread safe — otherwise another ticket's read time could sit ahead of this one's
+    // and blue-tick messages the customer has never seen.
+    setCustomerReadAt(null);
     // Opening clears the unread badge locally and tells the customer we've seen it.
     setTickets((rows) => rows.map((t) => (t.id === id ? { ...t, unread_count: 0 } : t)));
     fetch(`${API_ENDPOINTS.support}/tickets/${id}/read`, {
@@ -174,6 +213,7 @@ export default function Tickets() {
     setThread(null);
     setReply("");
     setCustomerTyping(false);
+    setCustomerReadAt(null);
   };
 
   // ── Realtime ──────────────────────────────────────────────────────────────────────

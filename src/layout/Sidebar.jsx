@@ -27,8 +27,8 @@ import {
   X,
 } from "lucide-react";
 
-// Order here is the sidebar's order. Daily work comes first: Orders through Support
-// Tickets sit directly under Dashboard, because those are the screens someone running the
+// Order here is the sidebar's order. Daily work comes first: Orders through Support sit
+// directly under Dashboard, because those are the screens someone running the
 // shop opens every day and they should never need a scroll to reach. Catalogue and
 // storefront setup — varieties, fabrics, products, arrangement — is configured once and
 // revisited occasionally, so it moves below.
@@ -42,7 +42,7 @@ const navItems = [
   { id: "exchanges", label: "Exchanges", icon: RefreshCw },
   { id: "inventory", label: "Inventory", icon: PackageCheck },
   { id: "reviews", label: "Reviews", icon: MessageSquareText, badge: 4 },
-  { id: "tickets", label: "Support Tickets", subtext: "(Customer conversations)", icon: LifeBuoy },
+  { id: "support", label: "Support", subtext: "(Live customer chat)", icon: LifeBuoy },
 
   // ── Catalogue, storefront & the rest ──
   { id: "varieties", label: "Varieties", subtext: "(Katan, Kadhwa, Tissue)", icon: GitBranch },

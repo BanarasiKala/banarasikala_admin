@@ -13,7 +13,7 @@ const authHeaders = () => ({
  * protocol, different HTTP client (this app uses fetch + absolute URLs, not axios).
  *
  * Why the token dance: EventSource cannot send an Authorization header. We POST
- * /support/stream-ticket with the admin's Bearer token to mint a 60-second single-use
+ * /support/stream-token with the admin's Bearer token to mint a 60-second single-use
  * token, and put that in the stream URL — so the real credential never enters a URL or an
  * access log. Because the token is single-use, EventSource's own auto-reconnect can't work
  * (it would replay a spent token), so reconnection is handled here with backoff.
@@ -39,7 +39,7 @@ export default function useSupportStream(path, onEvent) {
     const connect = async () => {
       if (cancelled) return;
       try {
-        const response = await fetch(`${API_ENDPOINTS.support}/stream-ticket`, {
+        const response = await fetch(`${API_ENDPOINTS.support}/stream-token`, {
           method: "POST",
           headers: authHeaders(),
         });
@@ -86,14 +86,14 @@ export default function useSupportStream(path, onEvent) {
 }
 
 /** Throttled "support is typing" ping — the server re-arms a 6s TTL on each call. */
-export function useTypingPing(ticketId) {
+export function useTypingPing(conversationId) {
   const lastSent = useRef(0);
   return () => {
-    if (!ticketId) return;
+    if (!conversationId) return;
     const now = Date.now();
     if (now - lastSent.current < 3000) return;
     lastSent.current = now;
-    fetch(`${API_ENDPOINTS.support}/tickets/${ticketId}/typing`, {
+    fetch(`${API_ENDPOINTS.support}/conversations/${conversationId}/typing`, {
       method: "POST",
       headers: authHeaders(),
     }).catch(() => {});

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 
 /**
- * Full-screen image viewer for ticket attachments.
+ * Full-screen image viewer for support chat attachments.
  *
  * Mirrors the storefront's ImageLightbox. Support looks at these photos to decide a refund
  * or a replacement, so opening them in a new tab meant leaving the thread — and the context

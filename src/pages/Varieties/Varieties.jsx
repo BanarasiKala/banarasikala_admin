@@ -64,7 +64,7 @@ export default function Varieties() {
     try {
       setLoading(true);
       const [varietyRes, productRes] = await Promise.all([
-        fetch(API_ENDPOINTS.varieties),
+        fetch(API_ENDPOINTS.varieties, { cache: "no-store" }),
         fetch(API_ENDPOINTS.products),
       ]);
 
@@ -129,7 +129,8 @@ export default function Varieties() {
         const payload = new FormData();
         payload.append("name", itemName);
         payload.append("description", formData.description || "");
-        payload.append("slug", editingVariety ? editingVariety.slug : generateSlug(itemName));
+        // No slug is sent. The server derives it from the name on every write, so a rename
+        // re-slugs instead of carrying the old one forward — see utils/slugify on the server.
         if (formData.image && !imageFile) payload.append("image", formData.image);
         if (imageFile) payload.append("image", imageFile);
 

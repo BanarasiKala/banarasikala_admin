@@ -56,8 +56,8 @@ export default function BulkAssign() {
     (async () => {
       try {
         const [v, m] = await Promise.all([
-          fetch(API_ENDPOINTS.varieties).then((r) => r.json()),
-          fetch(API_ENDPOINTS.materials).then((r) => r.json()),
+          fetch(API_ENDPOINTS.varieties, { cache: "no-store" }).then((r) => r.json()),
+          fetch(API_ENDPOINTS.materials, { cache: "no-store" }).then((r) => r.json()),
         ]);
         setVarieties(Array.isArray(v) ? v : []);
         setMaterials(Array.isArray(m) ? m : []);

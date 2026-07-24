@@ -96,8 +96,8 @@ export default function Products() {
     try {
       setLoading(true);
       const [colRes, matRes, varRes, occRes] = await Promise.all([
-        fetch(API_ENDPOINTS.colors), fetch(API_ENDPOINTS.materials),
-        fetch(API_ENDPOINTS.varieties), fetch(API_ENDPOINTS.occasions),
+        fetch(API_ENDPOINTS.colors, { cache: "no-store" }), fetch(API_ENDPOINTS.materials, { cache: "no-store" }),
+        fetch(API_ENDPOINTS.varieties, { cache: "no-store" }), fetch(API_ENDPOINTS.occasions, { cache: "no-store" }),
       ]);
       const [cols, mats, vars, occs] = await Promise.all([
         colRes.json(), matRes.json(), varRes.json(), occRes.json(),

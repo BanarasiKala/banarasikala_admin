@@ -46,7 +46,7 @@ export default function Fabrics() {
     try {
       setLoading(true);
       const [matRes, prodRes] = await Promise.all([
-        fetch(API_ENDPOINTS.materials),
+        fetch(API_ENDPOINTS.materials, { cache: "no-store" }),
         fetch(API_ENDPOINTS.products),
       ]);
       let data = await matRes.json();

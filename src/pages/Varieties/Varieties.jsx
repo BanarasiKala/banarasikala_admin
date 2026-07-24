@@ -16,11 +16,6 @@ import "./Varieties.css";
 
 const INITIAL_FORM = { name: "", description: "", image: "" };
 
-const generateSlug = (name) =>
-  name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
 
 export default function Varieties() {
   const [varieties, setVarieties] = useState([]);

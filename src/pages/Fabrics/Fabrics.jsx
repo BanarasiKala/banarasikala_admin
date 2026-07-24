@@ -94,16 +94,10 @@ export default function Fabrics() {
     setIsModalOpen(true);
   };
 
-  const generateSlug = (name) =>
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
 
   const handleSave = async (e) => {
     e.preventDefault();
     const itemName = formData.name;
-    const slug = generateSlug(itemName);
 
     showModal(
       "confirm",
@@ -118,7 +112,8 @@ export default function Fabrics() {
         const payload = new FormData();
         payload.append("name", formData.name);
         payload.append("description", formData.description || "");
-        payload.append("slug", editingFabric ? editingFabric.slug : slug);
+        // No slug is sent. The server derives it from the name on every write, so a rename
+        // re-slugs instead of carrying the old one forward — see utils/slugify on the server.
         if (formData.image && !imageFile) payload.append("image", formData.image);
         if (imageFile) payload.append("image", imageFile);
 

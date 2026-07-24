@@ -369,7 +369,7 @@ export default function Varieties() {
               </div>
               <div>
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Variety Image {editingVariety ? "" : "*"}
+                  Variety Image <span className="normal-case font-medium text-gray-400">(optional)</span>
                 </label>
                 <input
                   type="file"
@@ -391,7 +391,7 @@ export default function Varieties() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting || !formData.name.trim() || (!editingVariety && !imageFile && !formData.image)}
+                  disabled={submitting || !formData.name.trim()}
                   className="px-5 py-2 bg-[#800020] text-white font-bold rounded-lg flex items-center gap-2 hover:bg-[#6b001a] disabled:opacity-50"
                 >
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />}

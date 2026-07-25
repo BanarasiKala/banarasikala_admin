@@ -39,7 +39,7 @@ const exchangeTargetsOf = (line) => {
 const ACTION_STATUSES = ["all", "Initiated", "Completed", "Rejected", "Cancelled"];
 
 const authHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem("admin_token") || localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+  Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("admin_token") || localStorage.getItem("token") || ""}`,
   "Content-Type": "application/json",
 });
 

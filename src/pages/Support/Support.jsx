@@ -49,7 +49,7 @@ const STATUS_STYLE = {
 const styleOf = (status) => STATUS_STYLE[status] || STATUS_STYLE.Open;
 
 const authHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem("admin_token") || localStorage.getItem("accessToken") || localStorage.getItem("token")}`,
+  Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("admin_token") || localStorage.getItem("token")}`,
 });
 
 const jsonHeaders = () => ({ ...authHeaders(), "Content-Type": "application/json" });

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { imgUrl } from "../../utils/cloudinary";
 import compressImage from "../../utils/compressImage";
-import { Plus, Pencil, Trash2, Search, Filter, ChevronLeft, ChevronRight, Package, AlertCircle, Star, Sparkles, CheckCircle, AlertTriangle, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, Search, Filter, ChevronLeft, ChevronRight, Package, AlertCircle, Star, Sparkles, CheckCircle, AlertTriangle, X } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
 import ProductModal from "./ProductModal";
 import "./Products.css";
@@ -191,6 +191,62 @@ export default function Products() {
         key_highlights: Array.isArray(product.key_highlights) ? product.key_highlights.map(String) : [],
       });
     } else { setEditingProduct(null); setFormData(INITIAL_FORM_STATE); }
+    setNewColorImageFiles({});
+    setNewColorVideoFiles({});
+    setIsModalOpen(true);
+  };
+
+  /**
+   * Duplicate a listing: open the CREATE modal pre-filled with everything that defines the
+   * product — name, pricing, attributes, colours, options — but NOT its photos or videos, which
+   * are unique to each listing and must be uploaded fresh. `editingProduct` stays null so Save
+   * creates a new product instead of overwriting the original.
+   *
+   * The fields are copied explicitly rather than spreading the whole product, because the
+   * normalized product also carries id, slug, timestamps and read-only review aggregates that
+   * must never reach a create. The name gets a "(Copy)" suffix because the slug is derived from
+   * the name and is unique in the database — two products sharing a name collide on save.
+   */
+  const copyProduct = (product) => {
+    if (!product) return;
+    setEditingProduct(null);
+    setFormData({
+      ...INITIAL_FORM_STATE,
+      name: `${product.name || "Product"} (Copy)`,
+      sku: "", // unique + server-generated — never copied
+      description: product.description || "",
+      short_description: product.short_description || "",
+      selling_price: product.selling_price?.toString() || product.price?.toString() || "",
+      mrp_price: product.mrp_price?.toString() || product.old_price?.toString() || "",
+      cost_price: product.cost_price?.toString() || "",
+      discount_percent: product.discount_percent != null ? String(product.discount_percent) : "",
+      stock_quantity: product.stock_quantity ?? 0,
+      low_stock_threshold: product.low_stock_threshold ?? INITIAL_FORM_STATE.low_stock_threshold,
+      processing_days: product.processing_days != null ? String(product.processing_days) : "",
+      color_stocks: product.color_stocks && typeof product.color_stocks === "object" ? { ...product.color_stocks } : {},
+      weight: product.weight != null ? String(product.weight) : "",
+      length: product.length != null ? String(product.length) : INITIAL_FORM_STATE.length,
+      variety_ids: Array.isArray(product.variety_ids) && product.variety_ids.length
+        ? product.variety_ids.map(Number).filter(Boolean)
+        : (product.variety_id ? [Number(product.variety_id)] : []),
+      material_ids: Array.isArray(product.material_ids) && product.material_ids.length
+        ? product.material_ids.map(Number).filter(Boolean)
+        : (product.material_id ? [Number(product.material_id)] : []),
+      occasion_ids: Array.isArray(product.occasion_ids) ? product.occasion_ids.map(Number).filter(Boolean) : [],
+      special_collection: Boolean(product.special_collection),
+      is_new_arrival: Boolean(product.is_new_arrival),
+      status: ["active", "inactive"].includes(product.status) ? product.status : "active",
+      blouse_piece: typeof product.blouse_piece === "boolean" ? product.blouse_piece : true,
+      payment_options: Array.isArray(product.payment_options) && product.payment_options.length
+        ? [...product.payment_options] : ["prepaid"],
+      service_options: Array.isArray(product.service_options) ? [...product.service_options] : [],
+      care_instructions: product.care_instructions || "",
+      key_highlights: Array.isArray(product.key_highlights) ? product.key_highlights.map(String) : [],
+      // Explicitly excluded — photos and videos are per-listing and uploaded fresh.
+      images: [],
+      videos: [],
+      cover_color_id: "",
+    });
     setNewColorImageFiles({});
     setNewColorVideoFiles({});
     setIsModalOpen(true);
@@ -862,7 +918,7 @@ export default function Products() {
                           />
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button onClick={() => openModal(p)} className="p-1.5 text-gray-400 hover:text-[#D4AF37] hover:bg-amber-50 rounded"><Pencil className="w-4 h-4" /></button><button onClick={() => handleDelete(p.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></div></td>
+                      <td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button onClick={() => openModal(p)} title="Edit" className="p-1.5 text-gray-400 hover:text-[#D4AF37] hover:bg-amber-50 rounded"><Pencil className="w-4 h-4" /></button><button onClick={() => copyProduct(p)} title="Copy listing" className="p-1.5 text-gray-400 hover:text-[#800020] hover:bg-amber-50 rounded"><Copy className="w-4 h-4" /></button><button onClick={() => handleDelete(p.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></div></td>
                     </tr>
                   ))}
                 </tbody>

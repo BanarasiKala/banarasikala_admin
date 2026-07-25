@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import API_ENDPOINTS from "../config/api";
 
 const authHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem("admin_token") || localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+  Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("admin_token") || localStorage.getItem("token") || ""}`,
   "Content-Type": "application/json",
 });
 

@@ -21,7 +21,7 @@ export default function Reviews() {
       
       const response = await fetch(endpoint, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('admin_token') || localStorage.getItem('accessToken') || localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('admin_token') || localStorage.getItem('token')}`
         }
       });
       const data = await response.json();
@@ -40,7 +40,7 @@ export default function Reviews() {
       const response = await fetch(`${API_ENDPOINTS.feedback}/approve/${id}`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('admin_token') || localStorage.getItem('accessToken') || localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('admin_token') || localStorage.getItem('token')}`
         }
       });
       const data = await response.json();
@@ -58,7 +58,7 @@ export default function Reviews() {
       const response = await fetch(`${API_ENDPOINTS.feedback}/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('admin_token') || localStorage.getItem('accessToken') || localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('admin_token') || localStorage.getItem('token')}`
         }
       });
       const data = await response.json();

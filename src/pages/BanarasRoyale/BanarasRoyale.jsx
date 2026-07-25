@@ -4,7 +4,7 @@ import API_ENDPOINTS from "../../config/api";
 import { imgUrl } from "../../utils/cloudinary";
 
 const authHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem("admin_token") || localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+  Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("admin_token") || localStorage.getItem("token") || ""}`,
   "Content-Type": "application/json",
 });
 
@@ -114,7 +114,7 @@ export default function BanarasRoyale() {
     setImageUploading(true);
     setError("");
     try {
-      const token = localStorage.getItem("admin_token") || localStorage.getItem("accessToken") || localStorage.getItem("token") || "";
+      const token = localStorage.getItem("accessToken") || localStorage.getItem("admin_token") || localStorage.getItem("token") || "";
       const sigRes = await fetch(`${API_ENDPOINTS.products}/upload-signature?resourceType=image`, {
         headers: { Authorization: `Bearer ${token}` },
       });

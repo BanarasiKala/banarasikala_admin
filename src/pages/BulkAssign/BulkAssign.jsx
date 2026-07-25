@@ -5,16 +5,21 @@ import {
 import { API_ENDPOINTS } from "../../config/api";
 
 /**
- * Bulk assign variety and material to many products at once.
+ * Bulk assign varieties and materials to many products at once.
  *
  * Editing 47 products one form at a time is the problem this replaces. Products arrive in
  * families — the same design in six colours — so the workflow is: search the family name,
  * select all matches, apply. What took forty page loads takes one.
  *
- * ── Variety and material are set independently ──────────────────────────────────────────
- * Each dropdown has its own Apply. Sending both at once would force a decision about the
- * material every time you only meant to fix the variety, and "leave it as it is" has to be
- * expressible or the tool cannot be used twice on the same product without undoing itself.
+ * ── Variety and material are set independently, and each is a SET ────────────────────────
+ * A product now holds many varieties and many materials, so applying one has to say what
+ * happens to what is already there:
+ *   Add      the chosen ones join whatever each product already has (the default)
+ *   Remove   the chosen ones are taken off, the rest left alone
+ *   Replace  the chosen set becomes exactly what each product has (empty = clear the lot)
+ *
+ * Variety and material each have their own Apply so fixing one never forces a decision about
+ * the other — the server leaves an attribute untouched unless its key is present in the body.
  */
 
 const authHeaders = () => ({
@@ -23,9 +28,11 @@ const authHeaders = () => ({
 
 const jsonHeaders = () => ({ ...authHeaders(), "Content-Type": "application/json" });
 
-// Sentinel for the "clear this field" option. A real id is a number and "" means "no change",
-// so the third state needs a value that can never collide with either.
-const CLEAR = "__clear__";
+const MODES = [
+  { key: "add", label: "Add" },
+  { key: "remove", label: "Remove" },
+  { key: "replace", label: "Replace" },
+];
 
 export default function BulkAssign() {
   const [products, setProducts] = useState([]);
@@ -40,8 +47,9 @@ export default function BulkAssign() {
   const [onlyMissingMaterial, setOnlyMissingMaterial] = useState(false);
 
   const [selected, setSelected] = useState(() => new Set());
-  const [pickVariety, setPickVariety] = useState("");
-  const [pickMaterial, setPickMaterial] = useState("");
+  const [mode, setMode] = useState("add");
+  const [pickVarieties, setPickVarieties] = useState(() => new Set());
+  const [pickMaterials, setPickMaterials] = useState(() => new Set());
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -126,14 +134,29 @@ export default function BulkAssign() {
     return next;
   });
 
-  const apply = async (field, rawValue) => {
+  const togglePick = (setter) => (id) => setter((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleVarietyPick = togglePick(setPickVarieties);
+  const toggleMaterialPick = togglePick(setPickMaterials);
+
+  /**
+   * Apply one attribute (variety or material) to the selected products under the current mode.
+   * Only that attribute's key is sent, so the other is left untouched server-side. In
+   * add/remove the picked set must be non-empty; replace-with-nothing is a valid "clear all".
+   */
+  const apply = async (attr) => {
     const ids = [...selected];
     if (!ids.length || saving) return;
 
-    // Only the field being applied is sent. An omitted key means "leave alone" server-side,
-    // which is what keeps the two dropdowns independent.
-    const body = { productIds: ids };
-    body[field] = rawValue === CLEAR ? null : Number(rawValue);
+    const pickedSet = attr === "variety" ? pickVarieties : pickMaterials;
+    const picked = [...pickedSet].map(Number);
+    if (mode !== "replace" && picked.length === 0) return;
+
+    const body = { productIds: ids, mode };
+    body[attr === "variety" ? "varietyIds" : "materialIds"] = picked;
 
     setSaving(true);
     try {
@@ -145,14 +168,19 @@ export default function BulkAssign() {
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || "Update failed.");
 
-      const label = field === "varietyId" ? "Variety" : "Material";
-      const name = rawValue === CLEAR
-        ? "cleared"
-        : `set to ${(field === "varietyId" ? varietyById : materialById).get(Number(rawValue)) || rawValue}`;
-      setToast(`${label} ${name} on ${data.updated} product${data.updated === 1 ? "" : "s"}.`);
+      const label = attr === "variety" ? "Variety" : "Material";
+      const nameMap = attr === "variety" ? varietyById : materialById;
+      const names = picked.map((id) => nameMap.get(id) || id).join(", ");
+      let detail;
+      if (mode === "replace" && picked.length === 0) detail = "cleared";
+      else if (mode === "add") detail = `added ${names}`;
+      else if (mode === "remove") detail = `removed ${names}`;
+      else detail = `set to ${names}`;
+
+      setToast(`${label} ${detail} on ${data.updated} product${data.updated === 1 ? "" : "s"}.`);
       setError("");
-      // Selection is kept: assigning a variety then a material to the same family is the
-      // normal case, and clearing it would mean re-selecting six products to do the second half.
+      // Selection and picks are kept: assigning varieties then materials to the same family is
+      // the normal case, and clearing them would mean re-selecting six products for the second half.
       await fetchBoard();
     } catch (err) {
       setError(err.message || "Update failed.");
@@ -180,6 +208,11 @@ export default function BulkAssign() {
     );
   };
 
+  // add/remove need something to act with; replace can run empty (clears the attribute).
+  const canApplyVariety = selected.size > 0 && !saving && (mode === "replace" || pickVarieties.size > 0);
+  const canApplyMaterial = selected.size > 0 && !saving && (mode === "replace" || pickMaterials.size > 0);
+  const applyWord = (pickCount) => (mode === "replace" && pickCount === 0 ? "Clear" : "Apply");
+
   return (
     <div className="space-y-4">
       {toast && (
@@ -196,7 +229,7 @@ export default function BulkAssign() {
             Bulk Assign
           </h1>
           <p className="text-xs text-[#4A3F35]/60 font-semibold mt-0.5">
-            Set variety and material on many products at once.
+            Add, remove, or replace varieties and materials on many products at once.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -270,7 +303,7 @@ export default function BulkAssign() {
 
       {/* ── Apply bar. Sticky, because the selection is made at the bottom of a long list
              and the controls that act on it must not be scrolled away from. ─────────── */}
-      <div className={`sticky top-2 z-30 p-3 rounded-xl border transition-colors ${
+      <div className={`sticky top-2 z-30 p-3 rounded-xl border transition-colors space-y-2.5 ${
         selected.size > 0
           ? "bg-[#800020]/5 border-[#800020]/30"
           : "bg-white border-[#D4AF37]/20"
@@ -288,34 +321,89 @@ export default function BulkAssign() {
 
           <span className="flex-1" />
 
-          <select value={pickVariety} onChange={(e) => setPickVariety(e.target.value)}
-            className="h-9 px-2.5 rounded-lg border border-[#D4AF37]/30 bg-white text-xs font-bold text-[#4A3F35] outline-none focus:border-[#800020]">
-            <option value="">Set variety…</option>
-            {varieties.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-            <option value={CLEAR}>— Clear variety —</option>
-          </select>
-          <button
-            type="button"
-            disabled={!selected.size || !pickVariety || saving}
-            onClick={() => apply("varietyId", pickVariety)}
-            className="h-9 px-3 rounded-lg bg-[#800020] text-white text-xs font-bold disabled:opacity-40"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
-          </button>
+          {/* Mode governs both Apply buttons — add joins, remove strips, replace overwrites. */}
+          <span className="text-[11px] font-bold text-[#4A3F35]/55 uppercase tracking-wide">Mode</span>
+          <div className="inline-flex rounded-lg border border-[#D4AF37]/30 overflow-hidden">
+            {MODES.map((m) => (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => setMode(m.key)}
+                className={`px-3 h-8 text-[11px] font-bold transition-colors ${
+                  mode === m.key
+                    ? "bg-[#800020] text-white"
+                    : "bg-white text-[#4A3F35]/70 hover:bg-[#FAF8F6]"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          <select value={pickMaterial} onChange={(e) => setPickMaterial(e.target.value)}
-            className="h-9 px-2.5 rounded-lg border border-[#D4AF37]/30 bg-white text-xs font-bold text-[#4A3F35] outline-none focus:border-[#800020]">
-            <option value="">Set material…</option>
-            {materials.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            <option value={CLEAR}>— Clear material —</option>
-          </select>
+        {/* Variety row */}
+        <div className="flex items-start gap-2">
+          <span className="w-16 shrink-0 pt-1.5 text-[11px] font-bold text-[#4A3F35]/60">Variety</span>
+          <div className="flex-1 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
+            {varieties.length === 0 && <span className="text-[11px] font-semibold text-[#4A3F35]/40 pt-1">None yet.</span>}
+            {varieties.map((v) => {
+              const on = pickVarieties.has(v.id);
+              return (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => toggleVarietyPick(v.id)}
+                  className={`px-2.5 h-7 rounded-lg text-[11px] font-bold border transition-colors ${
+                    on
+                      ? "bg-[#800020] text-white border-[#800020]"
+                      : "bg-white text-[#4A3F35]/75 border-[#D4AF37]/30 hover:border-[#800020]/40"
+                  }`}
+                >
+                  {v.name}
+                </button>
+              );
+            })}
+          </div>
           <button
             type="button"
-            disabled={!selected.size || !pickMaterial || saving}
-            onClick={() => apply("materialId", pickMaterial)}
-            className="h-9 px-3 rounded-lg bg-[#800020] text-white text-xs font-bold disabled:opacity-40"
+            disabled={!canApplyVariety}
+            onClick={() => apply("variety")}
+            className="h-8 px-3 shrink-0 rounded-lg bg-[#800020] text-white text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5"
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : applyWord(pickVarieties.size)}
+          </button>
+        </div>
+
+        {/* Material row */}
+        <div className="flex items-start gap-2">
+          <span className="w-16 shrink-0 pt-1.5 text-[11px] font-bold text-[#4A3F35]/60">Material</span>
+          <div className="flex-1 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
+            {materials.length === 0 && <span className="text-[11px] font-semibold text-[#4A3F35]/40 pt-1">None yet.</span>}
+            {materials.map((m) => {
+              const on = pickMaterials.has(m.id);
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => toggleMaterialPick(m.id)}
+                  className={`px-2.5 h-7 rounded-lg text-[11px] font-bold border transition-colors ${
+                    on
+                      ? "bg-[#800020] text-white border-[#800020]"
+                      : "bg-white text-[#4A3F35]/75 border-[#D4AF37]/30 hover:border-[#800020]/40"
+                  }`}
+                >
+                  {m.name}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            disabled={!canApplyMaterial}
+            onClick={() => apply("material")}
+            className="h-8 px-3 shrink-0 rounded-lg bg-[#800020] text-white text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : applyWord(pickMaterials.size)}
           </button>
         </div>
       </div>
@@ -373,11 +461,11 @@ export default function BulkAssign() {
                     <span className="block text-[11px] font-semibold text-[#4A3F35]/45">{p.sku || `#${p.id}`}</span>
                   </span>
 
-                  {/* Current values, so you can see what you are about to change. A missing
-                      one is called out rather than left blank — blank reads as "loading". */}
-                  <span className="hidden sm:flex items-center gap-1.5 shrink-0">
-                    <Tag label={varietyById.get(p.variety_id)} />
-                    <Tag label={materialById.get(p.material_id)} />
+                  {/* Current values, so you can see what you are about to change. A missing group
+                      is called out rather than left blank — blank reads as "loading". */}
+                  <span className="hidden sm:flex flex-col items-end gap-1 shrink-0 max-w-[48%]">
+                    <TagGroup items={p.varieties} empty="No variety" />
+                    <TagGroup items={p.materials} empty="No material" />
                   </span>
                 </label>
               );
@@ -395,13 +483,24 @@ export default function BulkAssign() {
   );
 }
 
-/** Current variety/material on a row. "Not set" is stated, never left blank. */
-const Tag = ({ label }) => (
-  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border whitespace-nowrap ${
-    label
-      ? "bg-white text-[#4A3F35]/75 border-[#D4AF37]/30"
-      : "bg-amber-50 text-amber-700 border-amber-200"
-  }`}>
-    {label || "Not set"}
-  </span>
-);
+/** The varieties (or materials) currently on a row. "None" is stated, never left blank. */
+const TagGroup = ({ items, empty }) => {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) {
+    return (
+      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold border whitespace-nowrap bg-amber-50 text-amber-700 border-amber-200">
+        {empty}
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-wrap justify-end gap-1">
+      {list.map((it) => (
+        <span key={it.id}
+          className="px-2 py-0.5 rounded-md text-[10px] font-bold border whitespace-nowrap bg-white text-[#4A3F35]/75 border-[#D4AF37]/30">
+          {it.name}
+        </span>
+      ))}
+    </span>
+  );
+};

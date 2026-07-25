@@ -13,7 +13,9 @@ const INITIAL_FORM_STATE = {
   processing_days: "",
   color_stocks: {},
   weight: "", length: "6.5",
-  material_id: "", variety_id: "", occasion_ids: [],
+  // Variety and material are many-to-many now — arrays, like occasion_ids. The singular
+  // material_id/variety_id are kept only so an edit-load of an old product still populates.
+  variety_ids: [], material_ids: [], occasion_ids: [],
   special_collection: false, is_new_arrival: false, status: "active",
   blouse_piece: true,
   payment_options: ["prepaid"],
@@ -178,6 +180,14 @@ export default function Products() {
         videos: Array.isArray(product.videos) ? product.videos : [],
         cover_color_id: product.images?.find((img) => img.is_cover)?.color_id || "",
         occasion_ids: Array.isArray(product.occasion_ids) ? product.occasion_ids.map(Number).filter(Boolean) : [],
+        // Prefer the array; fall back to the legacy singular so a product saved under the old
+        // shape still shows its one variety/material selected.
+        variety_ids: Array.isArray(product.variety_ids) && product.variety_ids.length
+          ? product.variety_ids.map(Number).filter(Boolean)
+          : (product.variety_id ? [Number(product.variety_id)] : []),
+        material_ids: Array.isArray(product.material_ids) && product.material_ids.length
+          ? product.material_ids.map(Number).filter(Boolean)
+          : (product.material_id ? [Number(product.material_id)] : []),
         key_highlights: Array.isArray(product.key_highlights) ? product.key_highlights.map(String) : [],
       });
     } else { setEditingProduct(null); setFormData(INITIAL_FORM_STATE); }
@@ -199,17 +209,20 @@ export default function Products() {
     });
   };
 
-  const handleOccasionToggle = (id) => {
+  // One toggler for every multi-select attribute (occasion, variety, material) — they are the
+  // same operation on different array fields.
+  const handleMultiToggle = (field, id) => {
     setFormData((prev) => {
-      const current = Array.isArray(prev.occasion_ids) ? prev.occasion_ids : [];
+      const current = Array.isArray(prev[field]) ? prev[field] : [];
       return {
         ...prev,
-        occasion_ids: current.includes(id)
-          ? current.filter((oid) => oid !== id)
-          : [...current, id],
+        [field]: current.includes(id) ? current.filter((x) => x !== id) : [...current, id],
       };
     });
   };
+  const handleOccasionToggle = (id) => handleMultiToggle("occasion_ids", id);
+  const handleVarietyToggle = (id) => handleMultiToggle("variety_ids", id);
+  const handleMaterialToggle = (id) => handleMultiToggle("material_ids", id);
 
   const handleColorStockChange = (colorId, value) => {
     if (value !== "" && !/^\d+$/.test(value)) return;
@@ -605,8 +618,8 @@ export default function Products() {
         images: allImages,
         videos: allVideos,
         cover_color_id: coverColorId,
-        material_id: formData.material_id || null,
-        variety_id: formData.variety_id || null,
+        variety_ids: Array.isArray(formData.variety_ids) ? formData.variety_ids.map(Number).filter(Boolean) : [],
+        material_ids: Array.isArray(formData.material_ids) ? formData.material_ids.map(Number).filter(Boolean) : [],
         occasion_ids: Array.isArray(formData.occasion_ids) ? formData.occasion_ids.map(Number).filter(Boolean) : [],
         special_collection: Boolean(formData.special_collection),
         payment_options: formData.payment_options || [],
@@ -878,6 +891,8 @@ export default function Products() {
         formData={formData}
         onInputChange={handleInputChange}
         onOccasionToggle={handleOccasionToggle}
+        onVarietyToggle={handleVarietyToggle}
+        onMaterialToggle={handleMaterialToggle}
         onMultiSelectChange={handleMultiSelectChange}
         onColorStockChange={handleColorStockChange}
         onColorImageUpload={handleColorImageUpload}

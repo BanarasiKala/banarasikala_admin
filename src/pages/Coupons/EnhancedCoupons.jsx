@@ -313,14 +313,21 @@ export default function EnhancedCoupons() {
   const [selectedColors, setSelectedColors] = useState([]);
   const [selectedMats, setSelectedMats] = useState([]);
 
-  // Filtered lists based on selections
+  // A product can hold several varieties/materials now, so "is this product in the selected
+  // varieties" is a set intersection. `variety_ids` is the current shape; fall back to the
+  // singular so a product loaded under the old shape still filters.
+  const attrIds = (p, key) => {
+    const arr = p[`${key}_ids`];
+    if (Array.isArray(arr) && arr.length) return arr;
+    return p[`${key}_id`] != null ? [p[`${key}_id`]] : [];
+  };
   const availableProducts = products.filter(p => {
-    if (selectedVars.length > 0 && !selectedVars.includes(p.variety_id)) return false;
+    if (selectedVars.length > 0 && !attrIds(p, "variety").some(id => selectedVars.includes(id))) return false;
     if (
       selectedColors.length > 0 &&
       !selectedColors.some((colorId) => Number(p.color_stocks?.[String(colorId)] || 0) > 0)
     ) return false;
-    if (selectedMats.length > 0 && !selectedMats.includes(p.material_id)) return false;
+    if (selectedMats.length > 0 && !attrIds(p, "material").some(id => selectedMats.includes(id))) return false;
     return true;
   });
 
@@ -787,11 +794,11 @@ export default function EnhancedCoupons() {
                                     <div className="flex flex-col">
                                       <span className="text-sm font-bold text-gray-700 group-hover:text-[#800020]">{p.name}</span>
                                       <div className="flex gap-2 text-[9px] font-bold uppercase text-gray-400">
-                                        <span>{varieties.find(v => v.id === p.variety_id)?.name || "No variety"}</span>
+                                        <span>{attrIds(p, "variety").map(id => varieties.find(v => v.id === id)?.name).filter(Boolean).join(", ") || "No variety"}</span>
                                       </div>
                                     </div>
                                   </div>
-                                  <span className="text-[10px] text-gray-300 font-bold">{materials.find(m => m.id === p.material_id)?.name}</span>
+                                  <span className="text-[10px] text-gray-300 font-bold">{attrIds(p, "material").map(id => materials.find(m => m.id === id)?.name).filter(Boolean).join(", ")}</span>
                                 </label>
                               ))}
                             </div>

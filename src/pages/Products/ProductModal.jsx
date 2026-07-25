@@ -9,6 +9,8 @@ const ProductModal = ({
   formData,
   onInputChange,
   onOccasionToggle,
+  onVarietyToggle,
+  onMaterialToggle,
   onMultiSelectChange,
   onColorStockChange,
   onColorImageUpload,
@@ -98,7 +100,11 @@ const ProductModal = ({
 
   if (!isOpen) return null;
 
-  const isSelectionComplete = Boolean(formData.variety_id);
+  // Variety and material are arrays now; "at least one variety" is what gates the rest of the
+  // form, mirroring the old single-required-variety behaviour.
+  const varietyIds = Array.isArray(formData.variety_ids) ? formData.variety_ids : [];
+  const materialIds = Array.isArray(formData.material_ids) ? formData.material_ids : [];
+  const isSelectionComplete = varietyIds.length > 0;
 
   const inputClasses = (isDisabled) =>
     `w-full rounded-lg px-3 py-2.5 text-sm transition-all focus:outline-none focus:ring-1 ${
@@ -115,9 +121,9 @@ const ProductModal = ({
   const isFormValid = 
     formData.name && 
     formData.selling_price && 
-    formData.stock_quantity !== "" && 
-    formData.variety_id && 
-    formData.material_id &&
+    formData.stock_quantity !== "" &&
+    varietyIds.length > 0 &&
+    materialIds.length > 0 &&
     Array.isArray(formData.payment_options) &&
     formData.payment_options.length > 0 &&
     Array.isArray(formData.service_options) &&
@@ -184,26 +190,35 @@ const ProductModal = ({
 
              <div className="grid grid-cols-1 gap-6">
                 <div className="relative">
-                  <label className={labelClasses(false)}>Variety / Weave Type *</label>
-                  <select
-                    name="variety_id"
-                    value={formData.variety_id}
-                    onChange={onInputChange}
-                    required
-                    className={inputClasses(false)}
-                  >
-                    <option value="">Select Variety</option>
-                    {varieties.map((v) => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
-                    ))}
-                  </select>
-                  
-                  {varieties.length === 0 && (
-                    <div className="absolute -bottom-10 left-0 right-0 p-2 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 animate-in slide-in-from-top-1">
+                  <label className={labelClasses(false)}>
+                    Variety / Weave Type <span className="normal-case font-medium text-gray-400">(select one or more)</span> *
+                  </label>
+                  {varieties.length === 0 ? (
+                    <div className="p-2 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2">
                       <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
                       <p className="text-[10px] text-red-700 font-medium">
                         No varieties found! <button type="button" onClick={() => navigate("/varieties")} className="underline font-bold">Add Now</button>
                       </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-gray-300 bg-white px-3 py-2 flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                      {varieties.map((v) => {
+                        const checked = varietyIds.map(Number).includes(Number(v.id));
+                        return (
+                          <button
+                            type="button"
+                            key={v.id}
+                            onClick={() => onVarietyToggle(Number(v.id))}
+                            className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${
+                              checked
+                                ? "bg-[#800020] text-white border-[#800020]"
+                                : "bg-white text-gray-600 border-gray-300 hover:border-[#800020]/40"
+                            }`}
+                          >
+                            {v.name}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -666,13 +681,32 @@ const ProductModal = ({
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                  <label className={labelClasses(!isSelectionComplete)}>Fabric / Material *</label>
-                  <select name="material_id" value={formData.material_id} onChange={onInputChange} required className={inputClasses(!isSelectionComplete)}>
-                    <option value="">Select Material</option>
-                    {materials.map((mat) => (
-                      <option key={mat.id} value={mat.id}>{mat.name}</option>
-                    ))}
-                  </select>
+                  <label className={labelClasses(!isSelectionComplete)}>
+                    Fabric / Material <span className="normal-case font-medium text-gray-400">(one or more)</span> *
+                  </label>
+                  <div className={`rounded-lg border px-3 py-2 flex flex-wrap gap-1.5 max-h-36 overflow-y-auto ${
+                    !isSelectionComplete ? "opacity-50 pointer-events-none border-gray-200 bg-gray-50" : "border-gray-300 bg-white"
+                  }`}>
+                    {materials.length === 0 ? (
+                      <p className="text-xs text-gray-400 py-1">No materials available</p>
+                    ) : materials.map((mat) => {
+                      const checked = materialIds.map(Number).includes(Number(mat.id));
+                      return (
+                        <button
+                          type="button"
+                          key={mat.id}
+                          onClick={() => onMaterialToggle(Number(mat.id))}
+                          className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${
+                            checked
+                              ? "bg-[#800020] text-white border-[#800020]"
+                              : "bg-white text-gray-600 border-gray-300 hover:border-[#800020]/40"
+                          }`}
+                        >
+                          {mat.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div>

@@ -345,7 +345,7 @@ const ProductModal = ({
               <div className="space-y-6">
                 <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 shadow-inner">
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
-                    <label className="text-[10px] font-black text-gray-400 uppercase">Available colors, stock and up to 6 images</label>
+                    <label className="text-[10px] font-black text-gray-400 uppercase">Available colors, stock and up to 8 images</label>
                     <div className="flex items-center gap-2">
                       <div className="relative flex-1 sm:w-40">
                         <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
@@ -466,7 +466,7 @@ const ProductModal = ({
 
                           {qty > 0 && (
                             <div className="w-full space-y-2 mt-1 animate-in zoom-in-95 duration-200">
-                              <label className="block text-[9px] font-bold uppercase text-gray-500 text-center">Images ({totalImages}/6)</label>
+                              <label className="block text-[9px] font-bold uppercase text-gray-500 text-center">Images ({totalImages}/8)</label>
                               <input
                                 type="file"
                                 accept="image/*,.heic,.heif"

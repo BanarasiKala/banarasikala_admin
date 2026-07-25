@@ -270,14 +270,14 @@ export default function Products() {
         }
       });
 
-      const availableSlots = Math.max(0, 6 - existingSavedImages.length - existingNewFiles.length);
+      const availableSlots = Math.max(0, 8 - existingSavedImages.length - existingNewFiles.length);
       const acceptedFiles = uniqueIncomingFiles.slice(0, availableSlots);
       const overflowCount = uniqueIncomingFiles.length - acceptedFiles.length;
 
       if (duplicateCount > 0 || overflowCount > 0) {
         const messages = [];
         if (duplicateCount > 0) messages.push(`${duplicateCount} duplicate image(s) skipped.`);
-        if (overflowCount > 0) messages.push(`${overflowCount} image(s) skipped because max 6 allowed per color.`);
+        if (overflowCount > 0) messages.push(`${overflowCount} image(s) skipped because max 8 allowed per color.`);
         showModal("warning", "Some files were skipped", messages.join(" "));
       }
 

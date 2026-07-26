@@ -15,6 +15,7 @@ import {
   ArrowUpDown,
   PackageCheck,
   MessageSquareText,
+  Star,
   LifeBuoy,
   Layers,
   BarChart3,
@@ -43,6 +44,7 @@ const navItems = [
   { id: "exchanges", label: "Exchanges", icon: RefreshCw },
   { id: "inventory", label: "Inventory", icon: PackageCheck },
   { id: "reviews", label: "Reviews", icon: MessageSquareText, badge: 4 },
+  { id: "seed-reviews", label: "Seed Reviews", subtext: "(Shown when no real reviews)", icon: Star },
   { id: "support", label: "Support", subtext: "(Live customer chat)", icon: LifeBuoy },
 
   // ── Catalogue, storefront & the rest ──

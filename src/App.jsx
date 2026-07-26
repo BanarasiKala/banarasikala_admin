@@ -20,6 +20,7 @@ import BoxSection from "./pages/BoxSection/BoxSection";
 import Orders from "./pages/Orders/Orders";
 import Inventory from "./pages/Inventory/Inventory";
 import Reviews from "./pages/Reviews/Reviews";
+import SeedReviews from "./pages/SeedReviews/SeedReviews";
 import BulkAssign from "./pages/BulkAssign/BulkAssign";
 import Support from "./pages/Support/Support";
 import Reels from "./pages/Reels/Reels";
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/exchanges" element={<ProtectedRoute><OrderActions type="exchange" /></ProtectedRoute>} />
           <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
           <Route path="/reviews" element={<ProtectedRoute><Reviews /></ProtectedRoute>} />
+          <Route path="/seed-reviews" element={<ProtectedRoute><SeedReviews /></ProtectedRoute>} />
           <Route path="/bulk-assign" element={<ProtectedRoute><BulkAssign /></ProtectedRoute>} />
           <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
           <Route path="/reels" element={<ProtectedRoute><Reels /></ProtectedRoute>} />

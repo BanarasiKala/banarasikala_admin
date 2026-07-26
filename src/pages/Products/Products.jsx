@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { imgUrl } from "../../utils/cloudinary";
 import compressImage from "../../utils/compressImage";
-import { Plus, Pencil, Trash2, Copy, Search, Filter, ChevronLeft, ChevronRight, Package, AlertCircle, Star, Sparkles, CheckCircle, AlertTriangle, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, Mail, Search, Filter, ChevronLeft, ChevronRight, Package, AlertCircle, Star, Sparkles, CheckCircle, AlertTriangle, X } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
 import ProductModal from "./ProductModal";
 import "./Products.css";
@@ -722,6 +722,35 @@ export default function Products() {
     }
   };
 
+  // Email every customer who tapped "Notify me" for this product (once it's back in stock).
+  const handleSendRestock = (product) => {
+    showModal(
+      "warning",
+      "Send back-in-stock email?",
+      `Email everyone who asked to be notified about "${product.name}"? Do this once you've restocked it — each customer is emailed only once per request.`,
+      async () => {
+        closeModal();
+        try {
+          const token = localStorage.getItem("accessToken");
+          const res = await fetch(`${API_ENDPOINTS.stockNotifications}/product/${product.id}/send`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showModal("success", "Done", data.message || `Emailed ${data.emailed} customer(s).`);
+          } else {
+            showModal("error", "Send failed", data.message || "Could not send the emails.");
+          }
+        } catch (err) {
+          console.error(err);
+          showModal("error", "Network error", "Could not send the emails right now.");
+        }
+      },
+      closeModal,
+    );
+  };
+
   const handleDelete = async (id) => {
     showModal(
       "danger",
@@ -918,7 +947,7 @@ export default function Products() {
                           />
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button onClick={() => openModal(p)} title="Edit" className="p-1.5 text-gray-400 hover:text-[#D4AF37] hover:bg-amber-50 rounded"><Pencil className="w-4 h-4" /></button><button onClick={() => copyProduct(p)} title="Copy listing" className="p-1.5 text-gray-400 hover:text-[#800020] hover:bg-amber-50 rounded"><Copy className="w-4 h-4" /></button><button onClick={() => handleDelete(p.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></div></td>
+                      <td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button onClick={() => openModal(p)} title="Edit" className="p-1.5 text-gray-400 hover:text-[#D4AF37] hover:bg-amber-50 rounded"><Pencil className="w-4 h-4" /></button><button onClick={() => copyProduct(p)} title="Copy listing" className="p-1.5 text-gray-400 hover:text-[#800020] hover:bg-amber-50 rounded"><Copy className="w-4 h-4" /></button><button onClick={() => handleSendRestock(p)} title="Email back-in-stock subscribers" className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded"><Mail className="w-4 h-4" /></button><button onClick={() => handleDelete(p.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></div></td>
                     </tr>
                   ))}
                 </tbody>

@@ -168,7 +168,7 @@ export default function BulkAssign() {
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || "Update failed.");
 
-      const label = attr === "variety" ? "Variety" : "Material";
+      const label = attr === "variety" ? "Variety/Pattern" : "Material";
       const nameMap = attr === "variety" ? varietyById : materialById;
       const names = picked.map((id) => nameMap.get(id) || id).join(", ");
       let detail;
@@ -229,11 +229,11 @@ export default function BulkAssign() {
             Bulk Assign
           </h1>
           <p className="text-xs text-[#4A3F35]/60 font-semibold mt-0.5">
-            Add, remove, or replace varieties and materials on many products at once.
+            Add, remove, or replace varieties/patterns and materials on many products at once.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {pill(totals.totalProducts - totals.missingVariety, totals.totalProducts, "Variety")}
+          {pill(totals.totalProducts - totals.missingVariety, totals.totalProducts, "Variety/Pattern")}
           {pill(totals.totalProducts - totals.missingMaterial, totals.totalProducts, "Material")}
         </div>
       </div>
@@ -264,7 +264,7 @@ export default function BulkAssign() {
             onChange={(e) => setFilterVariety(e.target.value)}
             className="h-10 px-3 rounded-lg border border-[#D4AF37]/30 bg-white text-xs font-bold text-[#4A3F35] outline-none focus:border-[#800020] disabled:opacity-50"
           >
-            <option value="">Any variety</option>
+            <option value="">Any variety/pattern</option>
             {varieties.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
           </select>
 
@@ -291,7 +291,7 @@ export default function BulkAssign() {
           <label className="inline-flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={onlyMissingVariety}
               onChange={(e) => setOnlyMissingVariety(e.target.checked)} className="accent-[#800020]" />
-            Only missing variety
+            Only missing variety/pattern
           </label>
           <label className="inline-flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={onlyMissingMaterial}
@@ -343,7 +343,7 @@ export default function BulkAssign() {
 
         {/* Variety row */}
         <div className="flex items-start gap-2">
-          <span className="w-16 shrink-0 pt-1.5 text-[11px] font-bold text-[#4A3F35]/60">Variety</span>
+          <span className="w-16 shrink-0 pt-1.5 text-[11px] font-bold text-[#4A3F35]/60">Variety/Pattern</span>
           <div className="flex-1 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
             {varieties.length === 0 && <span className="text-[11px] font-semibold text-[#4A3F35]/40 pt-1">None yet.</span>}
             {varieties.map((v) => {

@@ -237,7 +237,7 @@ export default function Varieties() {
     <div className="space-y-6 relative">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#800020]">Varieties</h1>
+          <h1 className="text-2xl font-bold text-[#800020]">Varieties/Patterns</h1>
           <p className="text-sm text-gray-500 mt-1">Manage weave and style types.</p>
         </div>
         <div className="flex items-center gap-3">
@@ -255,7 +255,7 @@ export default function Varieties() {
             onClick={() => openFormModal()}
             className="px-6 py-2.5 bg-[#800020] text-white font-bold rounded-lg flex items-center gap-2 hover:bg-[#6b001a] transition-colors whitespace-nowrap"
           >
-            <Plus className="w-4 h-4" /> Add Variety
+            <Plus className="w-4 h-4" /> Add Variety/Pattern
           </button>
         </div>
       </div>
@@ -266,7 +266,7 @@ export default function Varieties() {
             <GitBranch className="w-6 h-6 text-[#800020]" />
           </div>
           <div>
-            <p className="text-sm text-gray-500">Total Varieties</p>
+            <p className="text-sm text-gray-500">Total Varieties/Patterns</p>
             <p className="text-2xl font-bold text-[#4A3F35]">{varieties.length}</p>
           </div>
         </div>
@@ -278,7 +278,7 @@ export default function Varieties() {
             <tr>
               <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase w-16">S.No</th>
               <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">ID</th>
-              <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Variety</th>
+              <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Variety/Pattern</th>
               <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Image</th>
               <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Slug</th>
               <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Description</th>
@@ -290,7 +290,7 @@ export default function Varieties() {
               <tr>
                 <td colSpan="7" className="px-4 py-16 text-center">
                   <GitBranch className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500">No varieties found.</p>
+                  <p className="text-gray-500">No varieties/patterns found.</p>
                 </td>
               </tr>
             ) : (
@@ -340,14 +340,14 @@ export default function Varieties() {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl relative z-10">
             <div className="px-6 py-4 border-b bg-gradient-to-r from-[#800020] to-[#a0152d] text-white rounded-t-2xl">
-              <h2 className="text-lg font-bold">{editingVariety ? "Edit Variety" : "New Variety"}</h2>
+              <h2 className="text-lg font-bold">{editingVariety ? "Edit Variety/Pattern" : "New Variety/Pattern"}</h2>
               <p className="text-white/80 text-sm mt-1">
                 {editingVariety ? "Update variety details" : "Add a new weave or style type"}
               </p>
             </div>
             <form onSubmit={handleSave} className="p-6 space-y-4">
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Variety Name *</label>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Variety/Pattern Name *</label>
                 <input
                   type="text"
                   value={formData.name}

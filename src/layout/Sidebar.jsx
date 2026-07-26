@@ -48,8 +48,8 @@ const navItems = [
   { id: "support", label: "Support", subtext: "(Live customer chat)", icon: LifeBuoy },
 
   // ── Catalogue, storefront & the rest ──
-  { id: "bulk-assign", label: "Bulk Assign", subtext: "(Variety & material)", icon: Layers },
-  { id: "varieties", label: "Varieties", subtext: "(Katan, Kadhwa, Tissue)", icon: GitBranch },
+  { id: "bulk-assign", label: "Bulk Assign", subtext: "(Variety/Pattern & material)", icon: Layers },
+  { id: "varieties", label: "Varieties/Patterns", subtext: "(Katan, Kadhwa, Tissue)", icon: GitBranch },
   { id: "fabrics", label: "Fabrics / Materials", subtext: "(Silk, Georgette, etc.)", icon: FileBadge },
   { id: "occasions", label: "Occasions", subtext: "(Wedding, Festival, etc.)", icon: Sparkles },
   { id: "colors", label: "Colors Palette", subtext: "(Red, Blue, Gold, etc.)", icon: Palette },

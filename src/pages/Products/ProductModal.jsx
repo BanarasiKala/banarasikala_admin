@@ -191,13 +191,13 @@ const ProductModal = ({
              <div className="grid grid-cols-1 gap-6">
                 <div className="relative">
                   <label className={labelClasses(false)}>
-                    Variety / Weave Type <span className="normal-case font-medium text-gray-400">(select one or more)</span> *
+                    Variety/Pattern / Weave Type <span className="normal-case font-medium text-gray-400">(select one or more)</span> *
                   </label>
                   {varieties.length === 0 ? (
                     <div className="p-2 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2">
                       <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
                       <p className="text-[10px] text-red-700 font-medium">
-                        No varieties found! <button type="button" onClick={() => navigate("/varieties")} className="underline font-bold">Add Now</button>
+                        No varieties/patterns found! <button type="button" onClick={() => navigate("/varieties")} className="underline font-bold">Add Now</button>
                       </p>
                     </div>
                   ) : (

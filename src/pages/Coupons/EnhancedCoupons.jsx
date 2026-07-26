@@ -680,7 +680,7 @@ export default function EnhancedCoupons() {
                       {[
                         { id: "all", label: "Store-wide (All Items)", icon: Tag },
                         { id: "product", label: "Specific Products", icon: Target },
-                        { id: "variety", label: "Filtered Varieties", icon: Settings },
+                        { id: "variety", label: "Filtered Varieties/Patterns", icon: Settings },
                         { id: "color", label: "Specific Colors", icon: Settings },
                         { id: "material", label: "By Fabric/Material", icon: Settings },
                         { id: "occasion", label: "Specific Occasions", icon: Settings }
@@ -716,9 +716,9 @@ export default function EnhancedCoupons() {
                     {(mappingType === "product" || mappingType === "variety") && (
                       <div className="space-y-6">
                         <div className="space-y-3 bg-gray-50 p-5 rounded-3xl border border-gray-100 animate-in slide-in-from-top-4">
-                          <label className="text-[10px] font-bold text-[#800020] uppercase tracking-widest">Select Varieties</label>
+                          <label className="text-[10px] font-bold text-[#800020] uppercase tracking-widest">Select Varieties/Patterns</label>
                           {varieties.length === 0 ? (
-                            <p className="text-xs text-gray-400 italic">No varieties found.</p>
+                            <p className="text-xs text-gray-400 italic">No varieties/patterns found.</p>
                           ) : (
                             <div className="grid grid-cols-2 gap-2">
                               {varieties.map(v => (

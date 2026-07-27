@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { imgUrl } from "../../utils/cloudinary";
 import compressImage from "../../utils/compressImage";
 import { Plus, Pencil, Trash2, Copy, Mail, Search, Filter, ChevronLeft, ChevronRight, Package, AlertCircle, Star, Sparkles, CheckCircle, AlertTriangle, X } from "lucide-react";
+import SubscriberMailButton from "../../components/SubscriberMailButton";
+import useCampaignSummary from "../../hooks/useCampaignSummary";
 import { API_ENDPOINTS } from "../../config/api";
 import ProductModal from "./ProductModal";
 import "./Products.css";
@@ -33,6 +35,13 @@ export default function Products() {
   const [occasions, setOccasions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  // Newsletter send history per product, so the Exclusive Pick / New Arrival buttons can show
+  // how many times each has already gone out before someone mails the list again.
+  const {
+    summary: campaignSummary,
+    activeSubscribers,
+    refresh: refreshCampaigns,
+  } = useCampaignSummary("product");
   const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [newColorImageFiles, setNewColorImageFiles] = useState({});
@@ -947,7 +956,7 @@ export default function Products() {
                           />
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button onClick={() => openModal(p)} title="Edit" className="p-1.5 text-gray-400 hover:text-[#D4AF37] hover:bg-amber-50 rounded"><Pencil className="w-4 h-4" /></button><button onClick={() => copyProduct(p)} title="Copy listing" className="p-1.5 text-gray-400 hover:text-[#800020] hover:bg-amber-50 rounded"><Copy className="w-4 h-4" /></button><button onClick={() => handleSendRestock(p)} title="Email back-in-stock subscribers" className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded"><Mail className="w-4 h-4" /></button><button onClick={() => handleDelete(p.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></div></td>
+                      <td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button onClick={() => openModal(p)} title="Edit" className="p-1.5 text-gray-400 hover:text-[#D4AF37] hover:bg-amber-50 rounded"><Pencil className="w-4 h-4" /></button><button onClick={() => copyProduct(p)} title="Copy listing" className="p-1.5 text-gray-400 hover:text-[#800020] hover:bg-amber-50 rounded"><Copy className="w-4 h-4" /></button><button onClick={() => handleSendRestock(p)} title="Email back-in-stock subscribers" className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded"><Mail className="w-4 h-4" /></button><SubscriberMailButton sourceType="product" sourceId={p.id} kind="exclusive" label={`Email subscribers: exclusive pick — ${p.name}`} title="Email newsletter subscribers as an Exclusive Pick" icon={Sparkles} stats={campaignSummary[String(p.id)]} activeSubscribers={activeSubscribers} onSent={refreshCampaigns} hoverClass="hover:text-amber-600 hover:bg-amber-50" /><SubscriberMailButton sourceType="product" sourceId={p.id} kind="new_arrival" label={`Email subscribers: new arrival — ${p.name}`} title="Email newsletter subscribers as a New Arrival" icon={Star} stats={campaignSummary[String(p.id)]} activeSubscribers={activeSubscribers} onSent={refreshCampaigns} hoverClass="hover:text-blue-600 hover:bg-blue-50" /><button onClick={() => handleDelete(p.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></div></td>
                     </tr>
                   ))}
                 </tbody>

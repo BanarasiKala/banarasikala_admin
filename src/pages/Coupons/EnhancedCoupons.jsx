@@ -3,9 +3,11 @@ import {
   Plus, Pencil, Trash2, Tag, Percent,
   IndianRupee, CheckCircle2,
   Info, ChevronRight, Settings, Target,
-  ExternalLink, Search, AlertTriangle, AlertCircle
+  ExternalLink, Search, AlertTriangle, AlertCircle, Mail
 } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
+import SubscriberMailButton from "../../components/SubscriberMailButton";
+import useCampaignSummary from "../../hooks/useCampaignSummary";
 
 const INITIAL_FORM = {
   code: "",
@@ -31,6 +33,13 @@ const INITIAL_FORM = {
 };
 
 export default function EnhancedCoupons() {
+  // Newsletter send history per coupon, so the row can show whether subscribers have already
+  // been told about it before anyone sends again.
+  const {
+    summary: campaignSummary,
+    activeSubscribers,
+    refresh: refreshCampaigns,
+  } = useCampaignSummary("coupon");
   const [coupons, setCoupons] = useState([]);
   const [products, setProducts] = useState([]);
   const [varieties, setVarieties] = useState([]);
@@ -448,6 +457,17 @@ export default function EnhancedCoupons() {
                       <div className="flex justify-end gap-1">
                         <button onClick={() => openViewModal(c)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="View Details"><ExternalLink className="w-4 h-4" /></button>
                         <button onClick={() => openModal(c)} className="p-2 text-gray-400 hover:text-[#800020] hover:bg-[#800020]/5 rounded-lg" title="Edit"><Pencil className="w-4 h-4" /></button>
+                        <SubscriberMailButton
+                          sourceType="coupon"
+                          sourceId={c.id}
+                          label={`Email subscribers about ${c.code}`}
+                          title="Email newsletter subscribers about this coupon"
+                          icon={Mail}
+                          stats={campaignSummary[String(c.id)]}
+                          activeSubscribers={activeSubscribers}
+                          onSent={refreshCampaigns}
+                          className="p-2"
+                        />
                         <button onClick={() => deleteCoupon(c.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>

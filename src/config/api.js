@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
   boxSections: `${API_BASE_URL}/api/box-sections`,
   auth: `${API_BASE_URL}/api/auth`,
   support: `${API_BASE_URL}/api/support`,
+  newsletter: `${API_BASE_URL}/api/newsletter`,
 };
 
 export default API_ENDPOINTS;

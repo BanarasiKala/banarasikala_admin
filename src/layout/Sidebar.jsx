@@ -26,6 +26,7 @@ import {
   XCircle,
   Film,
   Crown,
+  Mail,
   X,
 } from "lucide-react";
 
@@ -46,6 +47,7 @@ const navItems = [
   { id: "reviews", label: "Reviews", icon: MessageSquareText, badge: 4 },
   { id: "seed-reviews", label: "Seed Reviews", subtext: "(Shown when no real reviews)", icon: Star },
   { id: "support", label: "Support", subtext: "(Live customer chat)", icon: LifeBuoy },
+  { id: "newsletter", label: "Newsletter", subtext: "(Email subscribers)", icon: Mail },
 
   // ── Catalogue, storefront & the rest ──
   { id: "bulk-assign", label: "Bulk Assign", subtext: "(Variety/Pattern & material)", icon: Layers },

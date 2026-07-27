@@ -26,6 +26,7 @@ import Support from "./pages/Support/Support";
 import Reels from "./pages/Reels/Reels";
 import Analytics from "./pages/Analytics/Analytics";
 import Payments from "./pages/Payments/Payments";
+import Newsletter from "./pages/Newsletter/Newsletter";
 import Login from "./pages/Auth/Login";
 import Profile from "./pages/Profile/Profile";
 import OrderActions from "./pages/OrderActions/OrderActions";
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="/reels" element={<ProtectedRoute><Reels /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
           <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
+          <Route path="/newsletter" element={<ProtectedRoute><Newsletter /></ProtectedRoute>} />
         </Routes>
       </Layout>
     </Router>

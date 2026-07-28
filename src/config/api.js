@@ -17,6 +17,7 @@ export const API_ENDPOINTS = {
   reels: `${API_BASE_URL}/api/reels`,
   royale: `${API_BASE_URL}/api/royale`,
   boxSections: `${API_BASE_URL}/api/box-sections`,
+  marketplaces: `${API_BASE_URL}/api/marketplaces`,
   auth: `${API_BASE_URL}/api/auth`,
   support: `${API_BASE_URL}/api/support`,
   newsletter: `${API_BASE_URL}/api/newsletter`,

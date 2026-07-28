@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { imgUrl } from "../../utils/cloudinary";
-import { X, Calculator, Hash, AlertTriangle, Package, Sparkles, Star, Search, Video, PlusCircle, Minus, Zap, GripVertical } from "lucide-react";
+import { X, Calculator, Hash, AlertTriangle, Package, Sparkles, Star, Search, Video, PlusCircle, Minus, Zap, GripVertical, Store } from "lucide-react";
 
 const ProductModal = ({
   isOpen,
@@ -38,6 +38,8 @@ const ProductModal = ({
   varieties,
   colors,
   occasions,
+  marketplaces = [],
+  onMarketplaceLinkChange,
 }) => {
   const navigate = useNavigate();
   const [colorSearch, setColorSearch] = useState("");
@@ -916,6 +918,56 @@ const ProductModal = ({
                       >
                         <Minus className="w-4 h-4" />
                       </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 9: MARKETPLACE LISTINGS
+                Where this saree is also for sale. Each URL powers one card on that
+                channel's /store/<slug> page. Blank means "not listed there" — clearing a
+                field removes the link rather than saving an empty one. */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm relative">
+              <div className="flex items-center gap-3 mb-4 text-orange-600">
+                <Store className="w-4 h-4" />
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Step 9: Marketplace Listings</h3>
+              </div>
+
+              <p className="text-[11px] text-gray-400 mb-4 leading-relaxed">
+                Paste this product's link on each marketplace. It then appears on that channel's
+                page on the site. Optional — leave blank where it is not listed. To do many products
+                at once, use <span className="font-bold text-gray-500">Marketplaces → Bulk attach</span> instead.
+              </p>
+
+              {marketplaces.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed border-gray-100 rounded-xl">
+                  <Store className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-xs text-gray-400">No marketplaces set up yet. Add them under Marketplaces.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {marketplaces.map((market) => (
+                    <div key={market.id} className="flex items-center gap-3">
+                      <span
+                        className="flex-shrink-0 w-24 text-xs font-bold truncate"
+                        style={{ color: market.accent_color || "#800020" }}
+                        title={market.name}
+                      >
+                        {market.name}
+                      </span>
+                      <input
+                        type="url"
+                        placeholder={`https://www.${market.slug}.in/…`}
+                        value={formData.marketplace_links?.[market.id] || ""}
+                        onChange={(e) => onMarketplaceLinkChange(market.id, e.target.value)}
+                        className="flex-1 rounded-lg px-3 py-2 text-sm bg-white border border-gray-300 focus:border-[#800020] focus:ring-1 focus:ring-[#800020]/20 focus:outline-none text-gray-700"
+                      />
+                      {market.status !== "live" && (
+                        <span className="flex-shrink-0 text-[10px] text-amber-600 font-bold uppercase">
+                          {market.status === "coming_soon" ? "soon" : "hidden"}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -24,6 +24,10 @@ const INITIAL_FORM_STATE = {
   service_options: [],
   care_instructions: "",
   key_highlights: [],
+  // Keyed by marketplace id -> listing URL. An object rather than an array because the
+  // form is one field per channel, and a field cleared to blank has to mean "not listed
+  // there" — which an array of only-the-filled-ones cannot express.
+  marketplace_links: {},
 };
 
 export default function Products() {
@@ -33,6 +37,7 @@ export default function Products() {
   const [materials, setMaterials] = useState([]);
   const [varieties, setVarieties] = useState([]);
   const [occasions, setOccasions] = useState([]);
+  const [marketplaces, setMarketplaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   // Newsletter send history per product, so the Exclusive Pick / New Arrival buttons can show
@@ -101,6 +106,7 @@ export default function Products() {
   useEffect(() => {
     fetchLookupData();
     fetchProductSummary();
+    fetchMarketplaces();
   }, []);
 
   const fetchLookupData = async () => {
@@ -119,6 +125,42 @@ export default function Products() {
       setOccasions(Array.isArray(occs) ? occs : []);
     } catch (error) { console.error("Error:", error); }
     finally { setLoading(false); }
+  };
+
+  // The channels this product can be linked to. Fetched separately from the lookups above
+  // because it is admin-only, and a failure here must not stop the product form loading —
+  // marketplace links are optional, so an empty list simply hides that section.
+  const authHeaders = () => ({
+    Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}`,
+    "Content-Type": "application/json",
+  });
+
+  const fetchMarketplaces = async () => {
+    try {
+      const res = await fetch(`${API_ENDPOINTS.marketplaces}/admin/all`, { headers: authHeaders() });
+      const data = await res.json();
+      setMarketplaces(Array.isArray(data.marketplaces) ? data.marketplaces : []);
+    } catch (error) { console.error("fetchMarketplaces:", error); }
+  };
+
+  // Saved separately from the product itself: the product save goes through
+  // /with-images, which handles uploads and its own transaction, and threading links
+  // through it would couple two unrelated concerns. Failing here therefore does NOT
+  // fail the product — it is reported on its own so the saved product is not lost.
+  const saveMarketplaceLinks = async (productId, links) => {
+    const payload = Object.entries(links || {})
+      .map(([marketplace_id, url]) => ({ marketplace_id: Number(marketplace_id), url: String(url || "").trim() }))
+      .filter((row) => row.url);
+    // Always sent, even when empty: an empty set is how a link gets removed.
+    const res = await fetch(`${API_ENDPOINTS.marketplaces}/admin/product/${productId}/links`, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({ links: payload }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || "Could not save the marketplace links.");
+    }
   };
 
   const fetchProducts = async (page = currentPage, size = pageSize) => {
@@ -176,9 +218,29 @@ export default function Products() {
     }
   };
 
+  // Existing marketplace links for the product being edited. Fetched rather than read off
+  // the product row, because links live in their own table — the product payload has no
+  // idea about them.
+  const loadProductLinks = async (productId) => {
+    try {
+      const res = await fetch(`${API_ENDPOINTS.marketplaces}/admin/product/${productId}/links`, {
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      const byId = {};
+      for (const link of data.links || []) byId[link.marketplace_id] = link.url;
+      setFormData((prev) => ({ ...prev, marketplace_links: byId }));
+    } catch (error) {
+      console.error("loadProductLinks:", error);
+    }
+  };
+
   const openModal = (product = null) => {
     if (product) {
       setEditingProduct(product);
+      // Filled in asynchronously; the fields start blank and populate a moment later,
+      // which is why they are not part of the setFormData below.
+      loadProductLinks(product.id);
       setFormData({
         ...INITIAL_FORM_STATE,
         ...product,
@@ -500,6 +562,13 @@ export default function Products() {
     }));
   };
 
+  const handleMarketplaceLinkChange = (marketplaceId, url) => {
+    setFormData((prev) => ({
+      ...prev,
+      marketplace_links: { ...(prev.marketplace_links || {}), [marketplaceId]: url },
+    }));
+  };
+
   const handleCreateColor = async (name, hexCode, description) => {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     const token = localStorage.getItem("accessToken");
@@ -711,12 +780,28 @@ export default function Products() {
       });
 
       if (res.ok) {
+        // Links are saved after the product, against its id — which for a new product
+        // only exists once the response comes back. Reported separately on failure so a
+        // rejected URL cannot make it look as though the product itself did not save.
+        let linkWarning = "";
+        try {
+          const saved = await res.json().catch(() => ({}));
+          const productId = editingProduct?.id || saved?.id || saved?.product?.id;
+          if (productId) await saveMarketplaceLinks(productId, formData.marketplace_links);
+        } catch (linkError) {
+          linkWarning = ` The product was saved, but its marketplace links were not: ${linkError.message}`;
+        }
+
         if (tableReady) {
           await fetchProducts(1, pageSize);
           setCurrentPage(1);
         }
         setIsModalOpen(false);
-        showModal("success", "Success", editingProduct ? "Product updated successfully." : "Product created successfully.");
+        showModal(
+          linkWarning ? "warning" : "success",
+          linkWarning ? "Saved with a problem" : "Success",
+          (editingProduct ? "Product updated successfully." : "Product created successfully.") + linkWarning,
+        );
       } else {
         const err = await res.json();
         console.error("Product save failed:", err);
@@ -1015,6 +1100,8 @@ export default function Products() {
         varieties={varieties}
         colors={colors}
         occasions={occasions}
+        marketplaces={marketplaces}
+        onMarketplaceLinkChange={handleMarketplaceLinkChange}
       />
 
       {modal.show && (

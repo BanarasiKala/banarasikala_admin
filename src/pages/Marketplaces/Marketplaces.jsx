@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  ExternalLink, Layers, Pencil, Plus, Store, Trash2, X, Link2, CheckCircle2, AlertTriangle,
+  ExternalLink, Layers, Pencil, Plus, Search, Store, Trash2, X, Link2, CheckCircle2, AlertTriangle,
 } from "lucide-react";
 import API_ENDPOINTS from "../../config/api";
 
@@ -34,24 +34,8 @@ const statusPill = (status) => {
   return "bg-gray-100 text-gray-500";
 };
 
-/**
- * Parses the bulk paste box.
- *
- * Accepts a SKU (or slug, or product id) and a URL per line, separated by a comma, a tab
- * or run of spaces — which covers a paste straight out of Excel, out of a CSV, and out of
- * a hand-typed list, without asking anyone to reformat first. Blank lines and a leading
- * header row are dropped.
- */
-const parseBulk = (text) =>
-  String(text || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [key, ...rest] = line.split(/\s*[,\t]\s*|\s{2,}|\s+(?=https?:\/\/)/);
-      return { key: (key || "").trim(), url: rest.join(" ").trim() };
-    })
-    .filter((row) => row.key && row.url && !/^sku$/i.test(row.key));
+// Placeholder for a product with no photo, so rows keep their alignment.
+const NO_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E";
 
 export default function Marketplaces() {
   const [rows, setRows] = useState([]);
@@ -64,9 +48,16 @@ export default function Marketplaces() {
   const [saving, setSaving] = useState(false);
 
   const [bulkFor, setBulkFor] = useState(null);
-  const [bulkText, setBulkText] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkResult, setBulkResult] = useState(null);
+  // Picker state: what was typed, what came back, and the rows staged for saving.
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  // Staged rows: [{ id, name, sku, image, url, existing }]. `existing` marks a product
+  // that already had a link here, so the row can say it is replacing rather than adding.
+  // Named apart from `rows` above, which is the marketplace list.
+  const [attachRows, setAttachRows] = useState([]);
 
   const fetchRows = async () => {
     setLoading(true);
@@ -135,23 +126,73 @@ export default function Marketplaces() {
     fetchRows();
   };
 
+  const openAttach = (row) => {
+    setBulkFor(row);
+    setSearch("");
+    setResults([]);
+    setAttachRows([]);
+    setBulkResult(null);
+  };
+
+  // Debounced so typing a product name is one request when you stop, not one per letter.
+  useEffect(() => {
+    if (!bulkFor) return undefined;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const params = new URLSearchParams({ search, limit: "30" });
+        const res = await fetch(`${API_ENDPOINTS.marketplaces}/admin/${bulkFor.id}/products?${params}`, {
+          headers: authHeaders(),
+          signal: controller.signal,
+        });
+        const data = await res.json();
+        setResults(Array.isArray(data.products) ? data.products : []);
+      } catch (e) {
+        if (e.name !== "AbortError") setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [bulkFor, search]);
+
+  // Picking a product stages a row, pre-filled with whatever is already linked here — so
+  // the field shows what it is about to replace rather than looking empty.
+  const addRow = (product) => {
+    setAttachRows((current) => {
+      if (current.some((r) => r.id === product.id)) return current;
+      return [...current, { ...product, existing: Boolean(product.url) }];
+    });
+    setBulkResult(null);
+  };
+
+  const setRowUrl = (id, url) =>
+    setAttachRows((current) => current.map((r) => (r.id === id ? { ...r, url } : r)));
+
+  const removeRow = (id) => setAttachRows((current) => current.filter((r) => r.id !== id));
+
+  const readyRows = attachRows.filter((r) => String(r.url || "").trim());
+
   const runBulk = async () => {
-    const parsed = parseBulk(bulkText);
-    if (parsed.length === 0) {
-      setBulkResult({ attached: 0, updated: 0, failed: [{ key: "—", reason: "Nothing to read. Put one SKU and URL per line." }] });
-      return;
-    }
+    if (readyRows.length === 0) return;
     setBulkBusy(true);
     setBulkResult(null);
     try {
       const res = await fetch(`${API_ENDPOINTS.marketplaces}/admin/${bulkFor.id}/bulk`, {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ rows: parsed }),
+        // The server accepts a product id as the key, so the picker sends ids and no SKU
+        // lookup can go wrong.
+        body: JSON.stringify({ rows: readyRows.map((r) => ({ key: String(r.id), url: r.url })) }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Could not attach those links.");
       setBulkResult(data);
+      // Rows that saved are cleared; anything rejected stays on screen with its URL, so
+      // it can be corrected without being picked out of the catalogue again.
+      const failedKeys = new Set((data.failed || []).map((f) => String(f.key)));
+      setAttachRows((current) => current.filter((r) => failedKeys.has(String(r.id)) || !String(r.url || "").trim()));
       fetchRows();
     } catch (e) {
       setBulkResult({ attached: 0, updated: 0, failed: [{ key: "—", reason: e.message }] });
@@ -222,10 +263,10 @@ export default function Marketplaces() {
 
               <div className="flex items-center gap-2 mt-auto pt-2">
                 <button
-                  onClick={() => { setBulkFor(row); setBulkText(""); setBulkResult(null); }}
+                  onClick={() => openAttach(row)}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-[#800020] bg-[#800020]/5 rounded-lg hover:bg-[#800020]/10"
                 >
-                  <Layers className="w-3.5 h-3.5" /> Bulk attach
+                  <Layers className="w-3.5 h-3.5" /> Attach products
                 </button>
                 <button onClick={() => openEdit(row)} className="p-2 text-gray-400 hover:text-[#800020] hover:bg-[#800020]/5 rounded-lg" title="Edit">
                   <Pencil className="w-4 h-4" />
@@ -344,31 +385,108 @@ export default function Marketplaces() {
         </div>
       )}
 
-      {/* ── Bulk attach ── */}
+      {/* ── Attach products ── */}
       {bulkFor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !bulkBusy && setBulkFor(null)}>
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
-              <h3 className="font-bold text-[#800020] text-lg">Bulk attach — {bulkFor.name}</h3>
+              <h3 className="font-bold text-[#800020] text-lg">Attach products — {bulkFor.name}</h3>
               <button onClick={() => setBulkFor(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="p-6 space-y-4">
               <p className="text-xs text-gray-500 leading-relaxed">
-                One product per line: its <strong>SKU</strong> (or slug, or id), then the {bulkFor.name} URL.
-                Comma, tab or spaces between them — so a paste straight out of Excel works. A product
-                already linked here has its URL replaced.
+                Search a product by name or SKU, pick it, then paste its {bulkFor.name} link.
+                Add as many as you like and save them together. A product already linked here
+                shows its current URL — editing it replaces the link.
               </p>
 
-              <textarea
-                rows={10}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-mono"
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-                placeholder={`BKS00001, https://www.${bulkFor.slug}.in/dp/XXXXXXXX\nBKS00002, https://www.${bulkFor.slug}.in/dp/YYYYYYYY`}
-              />
+              {/* Search + results. Kept as a list rather than a native <select> so each row
+                  can carry a thumbnail, the SKU and whether it is already linked — none of
+                  which fits in an option element. */}
+              <div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search products by name or SKU…"
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#800020]"
+                  />
+                </div>
 
-              <p className="text-[11px] text-gray-400">{parseBulk(bulkText).length} row(s) ready.</p>
+                <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-gray-100 divide-y">
+                  {searching && <p className="p-3 text-[11px] text-gray-400">Searching…</p>}
+                  {!searching && results.length === 0 && (
+                    <p className="p-3 text-[11px] text-gray-400">
+                      {search ? "No products match that." : "Start typing to find a product."}
+                    </p>
+                  )}
+                  {!searching && results.map((product) => {
+                    const staged = attachRows.some((r) => r.id === product.id);
+                    return (
+                      <button
+                        key={product.id}
+                        type="button"
+                        onClick={() => addRow(product)}
+                        disabled={staged}
+                        className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${staged ? "opacity-50 cursor-default" : "hover:bg-gray-50"}`}
+                      >
+                        <img src={product.image || NO_IMAGE} alt="" className="w-9 h-9 rounded object-cover border bg-gray-50" />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-xs font-semibold text-[#4A3F35] truncate">{product.name}</span>
+                          <span className="block text-[10px] text-gray-400">{product.sku || `#${product.id}`}</span>
+                        </span>
+                        {/* Says so before anything is typed, so the same link is not pasted twice. */}
+                        {product.url && !staged && (
+                          <span className="text-[10px] font-bold text-green-600 uppercase">linked</span>
+                        )}
+                        {staged ? (
+                          <span className="text-[10px] font-bold text-gray-400 uppercase">added</span>
+                        ) : (
+                          <Plus className="w-4 h-4 text-[#800020] flex-none" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Staged rows */}
+              {attachRows.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-bold text-gray-500 uppercase">
+                    To attach ({readyRows.length} of {attachRows.length} ready)
+                  </p>
+                  {attachRows.map((row) => (
+                    <div key={row.id} className="flex items-center gap-2">
+                      <img src={row.image || NO_IMAGE} alt="" className="w-9 h-9 rounded object-cover border bg-gray-50 flex-none" />
+                      <span className="w-40 flex-none min-w-0">
+                        <span className="block text-xs font-semibold text-[#4A3F35] truncate">{row.name}</span>
+                        <span className="block text-[10px] text-gray-400">
+                          {row.existing ? "replacing existing link" : row.sku || `#${row.id}`}
+                        </span>
+                      </span>
+                      <input
+                        type="url"
+                        value={row.url}
+                        onChange={(e) => setRowUrl(row.id, e.target.value)}
+                        placeholder={`https://www.${bulkFor.slug}.in/…`}
+                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-[#800020]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeRow(row.id)}
+                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg flex-none"
+                        title="Remove"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {bulkResult && (
                 <div className="rounded-xl border border-gray-100 divide-y">
@@ -402,8 +520,16 @@ export default function Marketplaces() {
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white">
               <button onClick={() => setBulkFor(null)} className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg">Close</button>
-              <button onClick={runBulk} disabled={bulkBusy} className="px-5 py-2 bg-[#800020] text-white text-xs font-bold rounded-xl hover:bg-[#6a001a] disabled:opacity-60">
-                {bulkBusy ? "Attaching…" : "Attach links"}
+              <button
+                onClick={runBulk}
+                disabled={bulkBusy || readyRows.length === 0}
+                className="px-5 py-2 bg-[#800020] text-white text-xs font-bold rounded-xl hover:bg-[#6a001a] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {bulkBusy
+                  ? "Attaching…"
+                  : readyRows.length === 0
+                    ? "Attach links"
+                    : `Attach ${readyRows.length} link${readyRows.length === 1 ? "" : "s"}`}
               </button>
             </div>
           </div>

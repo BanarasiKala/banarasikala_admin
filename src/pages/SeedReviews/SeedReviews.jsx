@@ -21,7 +21,6 @@ const EMPTY_FORM = {
   id: null,
   reviewer_name: "",
   rating: 5,
-  title: "",
   comment: "",
   images: [],
   review_date: "",
@@ -129,7 +128,6 @@ export default function SeedReviews() {
       id: review.id,
       reviewer_name: review.reviewer_name || "",
       rating: review.rating || 5,
-      title: review.title || "",
       comment: review.comment || "",
       images: Array.isArray(review.images) ? review.images.map((i) => (typeof i === "string" ? { url: i } : i)) : [],
       review_date: review.review_date ? String(review.review_date).slice(0, 10) : "",
@@ -180,7 +178,6 @@ export default function SeedReviews() {
       product_id: selected.id,
       reviewer_name: form.reviewer_name.trim(),
       rating: form.rating,
-      title: form.title.trim() || null,
       comment: form.comment.trim(),
       images: form.images,
       review_date: form.review_date || null,
@@ -366,16 +363,9 @@ export default function SeedReviews() {
               </div>
             </div>
 
-            <div>
-              <label className="text-[10px] font-black text-[#4A3F35]/50 uppercase">Title (optional)</label>
-              <input
-                value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                placeholder="e.g. Absolutely gorgeous weave"
-                className="w-full h-10 px-3 mt-1 rounded-lg border border-[#D4AF37]/30 text-sm text-[#4A3F35] outline-none focus:border-[#800020]"
-              />
-            </div>
-
+            {/* No title field. Seed reviews stand in for real customer reviews, and those
+                no longer carry one — a seeded title would render where a real review shows
+                nothing, which is exactly how a seed gives itself away. */}
             <div>
               <label className="text-[10px] font-black text-[#4A3F35]/50 uppercase">Review</label>
               <textarea
@@ -467,7 +457,6 @@ export default function SeedReviews() {
                           <span className="text-sm font-bold text-[#4A3F35]">{review.reviewer_name}</span>
                           {inactive && <span className="text-[10px] font-bold uppercase text-[#4A3F35]/45 bg-[#4A3F35]/8 rounded px-1.5 py-0.5">Hidden</span>}
                         </div>
-                        {review.title && <p className="text-[13px] font-bold text-[#4A3F35] mt-1">{review.title}</p>}
                         <p className="text-[13px] text-[#4A3F35]/75 mt-0.5 whitespace-pre-line">{review.comment}</p>
                         {Array.isArray(review.images) && review.images.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-2">

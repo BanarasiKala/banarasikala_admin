@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  Plus, Trash2, Pencil, CheckCircle, Film, Video, Heart, Eye,
+  Plus, Trash2, Pencil, CheckCircle, CornerDownRight, Film, Video, Heart, Eye,
   MessageSquare, X, Search, UploadCloud, EyeOff,
 } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
@@ -72,10 +72,12 @@ export default function Reels() {
     }
   };
 
+  // Every comment on the store, newest first. Comments go live the moment a customer
+  // writes one, so this is a record to police rather than a queue to clear.
   const fetchComments = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_ENDPOINTS.reels}/admin/comments/pending`, { headers: authHeaders() });
+      const res = await fetch(`${API_ENDPOINTS.reels}/admin/comments`, { headers: authHeaders() });
       const data = await res.json();
       setComments(Array.isArray(data.comments) ? data.comments : []);
     } catch (e) {
@@ -197,16 +199,15 @@ export default function Reels() {
     fetchReels();
   };
 
-  const approveComment = async (id) => {
-    await fetch(`${API_ENDPOINTS.reels}/admin/comments/${id}/approve`, {
-      method: "PUT",
-      headers: authHeaders(),
-    });
-    fetchComments();
-  };
-
-  const deleteComment = async (id) => {
-    await fetch(`${API_ENDPOINTS.reels}/admin/comments/${id}`, {
+  // Deleting a comment that started a thread takes its replies with it, so the
+  // confirmation says so — the count is not recoverable and the admin should know
+  // what is going before it goes.
+  const deleteComment = async (c) => {
+    const warning = c.is_reply
+      ? `Delete this reply by ${c.author}?`
+      : `Delete this comment by ${c.author}? Any replies to it are deleted too.`;
+    if (!window.confirm(warning)) return;
+    await fetch(`${API_ENDPOINTS.reels}/admin/comments/${c.id}`, {
       method: "DELETE",
       headers: authHeaders(),
     });
@@ -224,7 +225,7 @@ export default function Reels() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="brand-font text-2xl font-bold text-[#800020]">Reels</h2>
-          <p className="text-gray-500 text-sm mt-1">Shoppable short videos with likes and moderated comments</p>
+          <p className="text-gray-500 text-sm mt-1">Shoppable short videos with likes and comments</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex bg-gray-100 p-1 rounded-xl">
@@ -238,7 +239,7 @@ export default function Reels() {
               onClick={() => setActiveTab("comments")}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === "comments" ? "bg-white text-[#800020] shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
-              Pending Comments{comments.length ? ` (${comments.length})` : ""}
+              Comments{comments.length ? ` (${comments.length})` : ""}
             </button>
           </div>
           {activeTab === "reels" && (
@@ -307,10 +308,14 @@ export default function Reels() {
       ) : comments.length === 0 ? (
         <div className="glass-card rounded-2xl border border-[#D4AF37]/10 p-20 text-center">
           <MessageSquare className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-          <p className="text-gray-400 font-medium">No comments awaiting approval.</p>
+          <p className="text-gray-400 font-medium">No comments yet.</p>
         </div>
       ) : (
         <div className="glass-card rounded-2xl overflow-hidden border border-[#D4AF37]/10">
+          <div className="px-6 py-3 bg-[#FAF8F6] border-b border-[#D4AF37]/10 text-[11px] text-gray-500">
+            Comments appear on the reel as soon as a signed-in customer posts them. Delete
+            anything that should not stand — removing a comment removes its replies too.
+          </div>
           <table className="w-full text-left">
             <thead className="bg-[#FAF8F6] text-[10px] uppercase font-bold text-gray-400 border-b border-[#D4AF37]/10">
               <tr>
@@ -328,16 +333,25 @@ export default function Reels() {
                     <p className="font-bold text-[#4A3F35]">{c.author}</p>
                     <p className="text-[10px] text-gray-400">{c.author_email}</p>
                   </td>
-                  <td className="px-6 py-4 text-gray-600 max-w-sm italic">“{c.comment}”</td>
+                  <td className="px-6 py-4 max-w-sm">
+                    {/* A reply reads as nonsense on its own ("same!"), so the comment it
+                        answers is quoted above it — that is what it is being judged against. */}
+                    {c.is_reply && c.reply_to && (
+                      <p className="flex items-start gap-1.5 text-[10px] text-gray-400 mb-1">
+                        <CornerDownRight className="w-3 h-3 mt-0.5 flex-none" />
+                        <span className="line-clamp-1">
+                          replying to <span className="font-bold">{c.reply_to.author}</span>: “{c.reply_to.comment}”
+                        </span>
+                      </p>
+                    )}
+                    <p className="text-gray-600 italic">“{c.comment}”</p>
+                  </td>
                   <td className="px-6 py-4 text-gray-600">{c.reel_title}</td>
                   <td className="px-6 py-4 text-gray-400 text-[10px]">
                     {new Date(c.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                   </td>
-                  <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
-                    <button onClick={() => approveComment(c.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Approve">
-                      <CheckCircle className="w-5 h-5" />
-                    </button>
-                    <button onClick={() => deleteComment(c.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg" title="Delete">
+                  <td className="px-6 py-4 text-right whitespace-nowrap">
+                    <button onClick={() => deleteComment(c)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg" title="Delete">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>

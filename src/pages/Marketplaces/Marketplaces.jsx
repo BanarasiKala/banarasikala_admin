@@ -58,6 +58,15 @@ export default function Marketplaces() {
   // that already had a link here, so the row can say it is replacing rather than adding.
   // Named apart from `rows` above, which is the marketplace list.
   const [attachRows, setAttachRows] = useState([]);
+  /**
+   * The thumbnail being shown large: { product, pinned }.
+   *
+   * `pinned` is what makes this work on both inputs. Hover opens it unpinned and moving
+   * away closes it, which is what a mouse expects; a tap opens it pinned so it survives
+   * the synthetic mouseleave a touch device fires straight afterwards, and then only the
+   * close button dismisses it. One state, both behaviours, no device sniffing.
+   */
+  const [preview, setPreview] = useState(null);
 
   const fetchRows = async () => {
     setLoading(true);
@@ -132,6 +141,7 @@ export default function Marketplaces() {
     setResults([]);
     setAttachRows([]);
     setBulkResult(null);
+    setPreview(null);
   };
 
   // Debounced so typing a product name is one request when you stop, not one per letter.
@@ -141,7 +151,9 @@ export default function Marketplaces() {
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const params = new URLSearchParams({ search, limit: "30" });
+        // No limit sent: the picker shows the whole catalogue on open, so a product can
+        // be scrolled to rather than only found by typing its name.
+        const params = new URLSearchParams({ search });
         const res = await fetch(`${API_ENDPOINTS.marketplaces}/admin/${bulkFor.id}/products?${params}`, {
           headers: authHeaders(),
           signal: controller.signal,
@@ -387,7 +399,7 @@ export default function Marketplaces() {
 
       {/* ── Attach products ── */}
       {bulkFor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !bulkBusy && setBulkFor(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { if (!bulkBusy) { setBulkFor(null); setPreview(null); } }}>
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <h3 className="font-bold text-[#800020] text-lg">Attach products — {bulkFor.name}</h3>
@@ -433,7 +445,17 @@ export default function Marketplaces() {
                         disabled={staged}
                         className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${staged ? "opacity-50 cursor-default" : "hover:bg-gray-50"}`}
                       >
-                        <img src={product.image || NO_IMAGE} alt="" className="w-9 h-9 rounded object-cover border bg-gray-50" />
+                        {/* The thumbnail is its own control: it enlarges the photo instead
+                            of staging the row, so stopPropagation keeps a tap meant for
+                            "let me see this" from also adding the product. */}
+                        <img
+                          src={product.image || NO_IMAGE}
+                          alt=""
+                          className="w-9 h-9 rounded object-cover border bg-gray-50 flex-none cursor-zoom-in"
+                          onMouseEnter={() => setPreview((p) => (p?.pinned ? p : { product, pinned: false }))}
+                          onMouseLeave={() => setPreview((p) => (p?.pinned ? p : null))}
+                          onClick={(e) => { e.stopPropagation(); setPreview({ product, pinned: true }); }}
+                        />
                         <span className="flex-1 min-w-0">
                           <span className="block text-xs font-semibold text-[#4A3F35] truncate">{product.name}</span>
                           <span className="block text-[10px] text-gray-400">{product.sku || `#${product.id}`}</span>
@@ -461,7 +483,14 @@ export default function Marketplaces() {
                   </p>
                   {attachRows.map((row) => (
                     <div key={row.id} className="flex items-center gap-2">
-                      <img src={row.image || NO_IMAGE} alt="" className="w-9 h-9 rounded object-cover border bg-gray-50 flex-none" />
+                      <img
+                        src={row.image || NO_IMAGE}
+                        alt=""
+                        className="w-9 h-9 rounded object-cover border bg-gray-50 flex-none cursor-zoom-in"
+                        onMouseEnter={() => setPreview((p) => (p?.pinned ? p : { product: row, pinned: false }))}
+                        onMouseLeave={() => setPreview((p) => (p?.pinned ? p : null))}
+                        onClick={() => setPreview({ product: row, pinned: true })}
+                      />
                       <span className="w-40 flex-none min-w-0">
                         <span className="block text-xs font-semibold text-[#4A3F35] truncate">{row.name}</span>
                         <span className="block text-[10px] text-gray-400">
@@ -519,7 +548,7 @@ export default function Marketplaces() {
             </div>
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white">
-              <button onClick={() => setBulkFor(null)} className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg">Close</button>
+              <button onClick={() => { setBulkFor(null); setPreview(null); }} className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg">Close</button>
               <button
                 onClick={runBulk}
                 disabled={bulkBusy || readyRows.length === 0}
@@ -532,6 +561,44 @@ export default function Marketplaces() {
                     : `Attach ${readyRows.length} link${readyRows.length === 1 ? "" : "s"}`}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enlarged thumbnail. z-index sits above the attach modal (z-50) so it is not
+          trapped behind the sheet it was opened from. Only a pinned preview gets the
+          backdrop and close button — an unpinned one is following the mouse and would be
+          dismissed by moving away before either could be used. */}
+      {preview?.product && (
+        <div
+          className={`fixed inset-0 z-[120] flex items-center justify-center p-4 ${preview.pinned ? "bg-black/80" : "pointer-events-none"}`}
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className={`relative rounded-xl bg-white p-3 shadow-2xl ${preview.pinned ? "w-full max-w-2xl" : "w-auto"}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {preview.pinned && (
+              <button
+                type="button"
+                onClick={() => setPreview(null)}
+                className="absolute right-2 top-2 z-10 rounded-md bg-black/70 p-1.5 text-white hover:bg-black"
+                aria-label="Close preview"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+            <img
+              src={preview.product.image || NO_IMAGE}
+              alt={preview.product.name || "Preview"}
+              className={`rounded-lg bg-white object-contain ${preview.pinned ? "h-[70vh] w-full" : "h-64 w-64"}`}
+            />
+            <p className="mt-2 truncate px-1 text-xs font-semibold text-[#4A3F35]">
+              {preview.product.name}
+            </p>
+            <p className="px-1 text-[10px] text-gray-400">
+              {preview.product.sku || `#${preview.product.id}`}
+            </p>
           </div>
         </div>
       )}

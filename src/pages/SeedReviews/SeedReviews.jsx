@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Star, Loader2, Check, X, Trash2, Pencil, Plus, PackageSearch,
-  Image as ImageIcon, Eye, EyeOff, Info,
+  Image as ImageIcon, Eye, EyeOff, Info, BadgeCheck,
 } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
 
@@ -25,6 +25,7 @@ const EMPTY_FORM = {
   images: [],
   review_date: "",
   is_active: true,
+  is_verified: false,
 };
 
 // Clickable 1–5 stars, used both in the form and (read-only) on each saved review.
@@ -132,6 +133,7 @@ export default function SeedReviews() {
       images: Array.isArray(review.images) ? review.images.map((i) => (typeof i === "string" ? { url: i } : i)) : [],
       review_date: review.review_date ? String(review.review_date).slice(0, 10) : "",
       is_active: review.is_active !== false,
+      is_verified: Boolean(review.is_verified),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -182,6 +184,7 @@ export default function SeedReviews() {
       images: form.images,
       review_date: form.review_date || null,
       is_active: form.is_active,
+      is_verified: form.is_verified,
     };
     try {
       const editing = Boolean(form.id);
@@ -230,7 +233,43 @@ export default function SeedReviews() {
     }
   };
 
+  const toggleVerified = async (review) => {
+    try {
+      const res = await fetch(`${API_ENDPOINTS.adminReviews}/${review.id}`, {
+        method: "PUT",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ is_verified: !review.is_verified }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Failed to update.");
+      await loadReviews(selected.id);
+    } catch (err) {
+      setError(err.message || "Failed to update review.");
+    }
+  };
+
+  // Badging thirty seed reviews one at a time is the kind of job that gets abandoned halfway,
+  // and half-done is the worst state: a shopper reading two badged reviews and one unbadged
+  // infers something about the unbadged one that is not true.
+  const setAllVerified = async (verified) => {
+    if (!selected?.id) return;
+    try {
+      const res = await fetch(`${API_ENDPOINTS.adminReviews}/verified/bulk`, {
+        method: "PUT",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ product_id: selected.id, is_verified: verified }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Failed to update.");
+      setToast(data?.message || "Reviews updated.");
+      await loadReviews(selected.id);
+    } catch (err) {
+      setError(err.message || "Failed to update reviews.");
+    }
+  };
+
   const activeCount = useMemo(() => reviews.filter((r) => r.is_active !== false).length, [reviews]);
+  const verifiedCount = useMemo(() => reviews.filter((r) => r.is_verified).length, [reviews]);
 
   return (
     <div className="space-y-4">
@@ -393,6 +432,23 @@ export default function SeedReviews() {
               </label>
             </div>
 
+            {/* A seed review has no purchase behind it, so unlike a real customer review there
+                is nothing to derive this from — it is off unless deliberately turned on. */}
+            <label className="flex items-start gap-2 text-xs font-bold text-[#4A3F35]/70 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.is_verified}
+                onChange={(e) => setForm((f) => ({ ...f, is_verified: e.target.checked }))}
+                className="accent-[#800020] mt-0.5"
+              />
+              <span>
+                Show &ldquo;Verified Buyer&rdquo; badge
+                <span className="block font-medium text-[#4A3F35]/45 mt-0.5">
+                  Leave off and the review shows only its date.
+                </span>
+              </span>
+            </label>
+
             {/* Images */}
             <div>
               <label className="text-[10px] font-black text-[#4A3F35]/50 uppercase block mb-1">Photos (optional)</label>
@@ -428,10 +484,22 @@ export default function SeedReviews() {
 
           {/* ── Existing reviews ─────────────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl border border-[#D4AF37]/20 overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-[#D4AF37]/15 bg-[#FAF8F6] flex items-center gap-3">
+            <div className="px-4 py-2.5 border-b border-[#D4AF37]/15 bg-[#FAF8F6] flex items-center gap-2 flex-wrap">
               <span className="text-xs font-bold text-[#4A3F35]">Seed reviews for this product</span>
-              <span className="flex-1" />
-              <span className="text-[11px] font-bold text-[#4A3F35]/45">{activeCount} active · {reviews.length} total</span>
+              <span className="flex-1 min-w-[8px]" />
+              {reviews.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setAllVerified(verifiedCount < reviews.length)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#800020] hover:bg-amber-50 rounded px-2 py-1"
+                >
+                  <BadgeCheck className="w-3.5 h-3.5" />
+                  {verifiedCount < reviews.length ? "Verify all" : "Unverify all"}
+                </button>
+              )}
+              <span className="text-[11px] font-bold text-[#4A3F35]/45">
+                {activeCount} active · {verifiedCount} verified · {reviews.length} total
+              </span>
             </div>
 
             {loadingReviews ? (
@@ -455,6 +523,11 @@ export default function SeedReviews() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <StarRating value={review.rating} size={15} />
                           <span className="text-sm font-bold text-[#4A3F35]">{review.reviewer_name}</span>
+                          {review.is_verified && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-emerald-700 bg-emerald-50 rounded px-1.5 py-0.5">
+                              <BadgeCheck className="w-3 h-3" /> Verified
+                            </span>
+                          )}
                           {inactive && <span className="text-[10px] font-bold uppercase text-[#4A3F35]/45 bg-[#4A3F35]/8 rounded px-1.5 py-0.5">Hidden</span>}
                         </div>
                         <p className="text-[13px] text-[#4A3F35]/75 mt-0.5 whitespace-pre-line">{review.comment}</p>
@@ -469,6 +542,14 @@ export default function SeedReviews() {
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
                         <button type="button" onClick={() => toggleActive(review)} title={inactive ? "Show" : "Hide"} className="p-1.5 text-[#4A3F35]/50 hover:text-[#800020] hover:bg-amber-50 rounded">
                           {inactive ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleVerified(review)}
+                          title={review.is_verified ? "Remove Verified Buyer badge" : "Show Verified Buyer badge"}
+                          className={`p-1.5 rounded hover:bg-emerald-50 ${review.is_verified ? "text-emerald-600" : "text-[#4A3F35]/50 hover:text-emerald-600"}`}
+                        >
+                          <BadgeCheck className="w-4 h-4" />
                         </button>
                         <button type="button" onClick={() => editReview(review)} title="Edit" className="p-1.5 text-[#4A3F35]/50 hover:text-[#D4AF37] hover:bg-amber-50 rounded">
                           <Pencil className="w-4 h-4" />

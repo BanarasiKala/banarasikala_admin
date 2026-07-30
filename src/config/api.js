@@ -12,6 +12,7 @@ export const API_ENDPOINTS = {
   orders: `${API_BASE_URL}/api/orders`,
   coupons: `${API_BASE_URL}/api/coupons`,
   feedback: `${API_BASE_URL}/api/feedback`,
+  customers: `${API_BASE_URL}/api/customers`,
   adminReviews: `${API_BASE_URL}/api/admin-reviews`,
   stockNotifications: `${API_BASE_URL}/api/stock-notifications`,
   reels: `${API_BASE_URL}/api/reels`,

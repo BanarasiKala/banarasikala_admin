@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Trash2, CheckCircle, Star, MessageSquare } from 'lucide-react';
+import { Trash2, CheckCircle, Star, MessageSquare, BadgeCheck, AlertCircle } from 'lucide-react';
 import { API_ENDPOINTS } from '../../config/api';
 import './Reviews.css';
+
+const authHeader = () => ({
+  Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('admin_token') || localStorage.getItem('token')}`,
+});
 
 export default function Reviews() {
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('pending'); // 'pending' or 'approved'
 
   useEffect(() => {
@@ -15,23 +20,70 @@ export default function Reviews() {
   const fetchFeedbacks = async () => {
     try {
       setLoading(true);
-      const endpoint = activeTab === 'pending' 
-        ? `${API_ENDPOINTS.feedback}/pending` 
-        : `${API_ENDPOINTS.feedback}/approved`;
-      
-      const response = await fetch(endpoint, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('admin_token') || localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setFeedbacks(data.data);
+      setError('');
+      // Both tabs read the admin listing. The public `/approved` endpoint returns general site
+      // testimonials only (it feeds the home page), so reading it here made an approved product
+      // review disappear from this table the moment it was approved — visible while pending,
+      // then unreachable for editing, unverifying, or removal.
+      const endpoint = `${API_ENDPOINTS.feedback}/all?approved=${activeTab === 'approved'}`;
+
+      const response = await fetch(endpoint, { headers: authHeader() });
+      // A missing route falls through to the SPA handler, which answers 200 with an HTML
+      // document. Parsing that as JSON throws, and the old catch only logged — so a backend
+      // that had never loaded this route was indistinguishable from "no feedback exists".
+      const body = await response.text();
+      let data;
+      try {
+        data = JSON.parse(body);
+      } catch {
+        throw new Error(
+          response.ok
+            ? 'The server answered with a page instead of data — the backend is probably running older code. Restart it and try again.'
+            : `Request failed (${response.status}).`,
+        );
       }
-    } catch (error) {
-      console.error('Error fetching feedbacks:', error);
+      if (!response.ok || !data.success) throw new Error(data?.message || 'Failed to load feedback.');
+      setFeedbacks(Array.isArray(data.data) ? data.data : []);
+    } catch (err) {
+      console.error('Error fetching feedbacks:', err);
+      setFeedbacks([]);
+      setError(err.message || 'Failed to load feedback.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleVerified = async (item) => {
+    try {
+      const response = await fetch(`${API_ENDPOINTS.feedback}/verified/${item.id}`, {
+        method: 'PUT',
+        headers: { ...authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_verified: !item.is_verified }),
+      });
+      const data = await response.json();
+      if (data.success) fetchFeedbacks();
+    } catch (error) {
+      console.error('Error updating verified badge:', error);
+    }
+  };
+
+  // Badging reviews one at a time does not scale, and a half-finished pass is worse than
+  // either state: a shopper reading two badged reviews and one unbadged infers something about
+  // the unbadged one that is not true.
+  const handleVerifyAll = async (verified) => {
+    if (!window.confirm(
+      `${verified ? 'Show' : 'Hide'} the "Verified Buyer" badge on every product review?`,
+    )) return;
+    try {
+      const response = await fetch(`${API_ENDPOINTS.feedback}/verified/bulk`, {
+        method: 'PUT',
+        headers: { ...authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_verified: verified }),
+      });
+      const data = await response.json();
+      if (data.success) fetchFeedbacks();
+    } catch (error) {
+      console.error('Error bulk updating verified badges:', error);
     }
   };
 
@@ -39,9 +91,7 @@ export default function Reviews() {
     try {
       const response = await fetch(`${API_ENDPOINTS.feedback}/approve/${id}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('admin_token') || localStorage.getItem('token')}`
-        }
+        headers: authHeader(),
       });
       const data = await response.json();
       if (data.success) {
@@ -57,9 +107,7 @@ export default function Reviews() {
     try {
       const response = await fetch(`${API_ENDPOINTS.feedback}/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('admin_token') || localStorage.getItem('token')}`
-        }
+        headers: authHeader(),
       });
       const data = await response.json();
       if (data.success) {
@@ -78,8 +126,26 @@ export default function Reviews() {
           <p className="text-gray-500 text-sm mt-1">Manage customer reviews and storefront testimonials</p>
         </div>
         
+        <div className="flex items-center gap-2">
+          {/* Applies to every product review in the catalogue, not just the rows on screen —
+              which is the point: the one-at-a-time route is unusable at any real volume. */}
+          <button
+            onClick={() => handleVerifyAll(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+            title="Show the Verified Buyer badge on every product review"
+          >
+            <BadgeCheck className="w-4 h-4" /> Verify all
+          </button>
+          <button
+            onClick={() => handleVerifyAll(false)}
+            className="px-3 py-2 rounded-lg text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
+            title="Hide the Verified Buyer badge on every product review"
+          >
+            Unverify all
+          </button>
+
         <div className="flex bg-gray-100 p-1 rounded-xl">
-          <button 
+          <button
             onClick={() => setActiveTab('pending')}
             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'pending' ? 'bg-white text-[#800020] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
@@ -92,8 +158,25 @@ export default function Reviews() {
             Approved
           </button>
         </div>
+        </div>
       </div>
       
+      {error && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-bold">Could not load feedback</p>
+            <p className="text-red-600/85 mt-0.5">{error}</p>
+          </div>
+          <button
+            onClick={fetchFeedbacks}
+            className="ml-auto shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold bg-red-100 hover:bg-red-200 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="glass-card rounded-2xl overflow-hidden shadow-sm border border-[#D4AF37]/10">
         {loading ? (
           <div className="p-20 text-center">
@@ -108,6 +191,7 @@ export default function Reviews() {
                 <th className="px-6 py-4">Rating</th>
                 <th className="px-6 py-4">Product</th>
                 <th className="px-6 py-4">Review</th>
+                <th className="px-6 py-4">Verified</th>
                 <th className="px-6 py-4">Date</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
@@ -115,7 +199,7 @@ export default function Reviews() {
             <tbody className="text-xs divide-y divide-[#D4AF37]/5 bg-white">
               {feedbacks.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-20 text-center">
+                  <td colSpan="7" className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <MessageSquare className="w-12 h-12 text-gray-200" />
                       <p className="text-gray-400 font-medium">No {activeTab} feedback found</p>
@@ -153,6 +237,28 @@ export default function Reviews() {
                     <td className="px-6 py-4 text-gray-600 max-w-xs italic leading-relaxed">
                       {item.title && <p className="not-italic font-bold text-[#4A3F35] mb-1">{item.title}</p>}
                       "{item.comment}"
+                    </td>
+                    {/* Whether the storefront shows "Verified Buyer" on this review. Every row
+                        here IS from a delivered order, so it starts on — this is for the
+                        exceptions. A general store testimonial has no purchase behind it, so
+                        there is nothing to verify and no toggle. */}
+                    <td className="px-6 py-4">
+                      {item.product_id ? (
+                        <button
+                          onClick={() => handleToggleVerified(item)}
+                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors ${
+                            item.is_verified
+                              ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                              : 'text-gray-400 bg-gray-100 hover:bg-gray-200'
+                          }`}
+                          title={item.is_verified ? 'Hide the badge on this review' : 'Show the badge on this review'}
+                        >
+                          <BadgeCheck className="w-3.5 h-3.5" />
+                          {item.is_verified ? 'Verified' : 'Off'}
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-gray-300 font-medium">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-gray-400 text-[10px]">
                       {new Date(item.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}

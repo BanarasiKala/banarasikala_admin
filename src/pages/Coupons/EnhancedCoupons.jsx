@@ -3,7 +3,7 @@ import {
   Plus, Pencil, Trash2, Tag, Percent,
   IndianRupee, CheckCircle2,
   Info, ChevronRight, Settings, Target,
-  ExternalLink, Search, AlertTriangle, AlertCircle, Mail
+  ExternalLink, Search, AlertTriangle, AlertCircle, Mail, CalendarClock
 } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
 import SubscriberMailButton from "../../components/SubscriberMailButton";
@@ -29,6 +29,9 @@ const INITIAL_FORM = {
   valid_until: "",
   is_active: true,
   display_on_homepage: false,
+  // Off by default: an expiry shown to customers is a promise, so it is opted into per
+  // coupon rather than something every new coupon starts doing.
+  show_validity: false,
   banner_text: "",
 };
 
@@ -133,6 +136,9 @@ export default function EnhancedCoupons() {
         applicable_material_id: coupon.applicable_material_id || [],
         applicable_occasion_id: coupon.applicable_occasion_id || [],
         min_delivery_km: coupon.min_delivery_km || "",
+        // Coerced: rows created before this column existed come back null, which would make
+        // the checkbox uncontrolled and warn on first toggle.
+        show_validity: Boolean(coupon.show_validity),
       });
     } else { 
       setEditingCoupon(null); 
@@ -679,15 +685,38 @@ export default function EnhancedCoupons() {
                     {formData.display_on_homepage && (
                       <div className="animate-in slide-in-from-top-2 duration-200">
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Banner Message (e.g. FLAT 20% OFF)</label>
-                        <input 
-                          type="text" 
-                          value={formData.banner_text} 
-                          onChange={(e) => setFormData({...formData, banner_text: e.target.value})} 
-                          className="w-full px-4 py-3 border border-gray-200 rounded-xl mt-1 outline-none focus:border-[#800020] bg-white" 
+                        <input
+                          type="text"
+                          value={formData.banner_text}
+                          onChange={(e) => setFormData({...formData, banner_text: e.target.value})}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl mt-1 outline-none focus:border-[#800020] bg-white"
                           placeholder="What users will see on the banner"
                         />
                       </div>
                     )}
+
+                    <div className="flex items-center justify-between pt-4 border-t border-[#800020]/10">
+                      <div className="flex items-center gap-2">
+                        <CalendarClock className="w-5 h-5 text-[#800020]" />
+                        <div>
+                          <span className="font-bold text-[#800020] text-sm">Show Expiry To Customers</span>
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            {formData.valid_until
+                              ? "Prints “Valid till …” on the coupon card, counting down in its final week."
+                              : "Set a Valid Until date above for this to show anything."}
+                          </p>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.show_validity}
+                          onChange={(e) => setFormData({ ...formData, show_validity: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#800020]"></div>
+                      </label>
+                    </div>
                   </div>
                 </div>
               )}

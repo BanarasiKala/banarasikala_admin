@@ -61,7 +61,7 @@ const navItems = [
   { id: "reels", label: "Reels", subtext: "(Shoppable videos)", icon: Film },
   { id: "royale", label: "Banaras Royale", subtext: "(Home showcase)", icon: Crown },
   { id: "box-section", label: "Box Section", subtext: "(Home media mosaic)", icon: LayoutGrid },
-  { id: "marketplaces", label: "Marketplaces", subtext: "(Amazon, Flipkart, Myntra)", icon: Store },
+  { id: "marketplaces", label: "Marketplaces", icon: Store },
   { id: "arrange", label: "Arrange Storefront", subtext: "(Order on home & collection)", icon: ArrowUpDown },
   { id: "users", label: "User Management", icon: Users },
   { id: "analytics", label: "Analytics", icon: BarChart3 },

@@ -26,7 +26,7 @@ const EMPTY_FORM = {
 
 // Upload directly to S3 via a pre-signed PUT URL, reporting progress. The
 // Content-Type MUST equal the value the URL was signed with or S3 returns 403.
-const uploadToS3 = (uploadUrl, file, onProgress, contentType) =>
+const uploadToS3 = (uploadUrl, file, onProgress, contentType, cacheControl) =>
   new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", uploadUrl);
@@ -148,9 +148,9 @@ export default function Reels() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.message || `Could not get upload URL (HTTP ${res.status})`);
       }
-      const { uploadUrl, publicUrl } = await res.json();
+      const { uploadUrl, publicUrl, cacheControl } = await res.json();
       // Content-Type on the PUT must match what the URL was signed for.
-      await uploadToS3(uploadUrl, file, setUploadPct, contentType);
+      await uploadToS3(uploadUrl, file, setUploadPct, contentType, cacheControl);
       setForm((f) => ({ ...f, video_url: publicUrl }));
     } catch (e) {
       console.error("[Reels] video upload failed:", e);

@@ -9,11 +9,14 @@ const authHeaders = () => ({
 });
 
 // Upload directly to S3 via a pre-signed PUT URL, reporting progress.
-const uploadToS3 = (uploadUrl, file, onProgress, contentType) =>
+const uploadToS3 = (uploadUrl, file, onProgress, contentType, cacheControl) =>
   new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", uploadUrl);
     xhr.setRequestHeader("Content-Type", contentType);
+    // Must match the CacheControl the presigned URL was signed with, or S3 returns a
+    // signature mismatch. The value comes from the server so the two cannot drift.
+    if (cacheControl) xhr.setRequestHeader("Cache-Control", cacheControl);
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onProgress) onProgress(Math.round((event.loaded / event.total) * 100));
     };
@@ -137,7 +140,7 @@ export default function BoxSection() {
         const res = await fetch(`${API_ENDPOINTS.boxSections}/admin/upload-url?${params}`, { headers: authHeaders() });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Failed to get upload URL.");
-        await uploadToS3(data.uploadUrl, file, (pct) => setVideoStatus(`${index + 1}/${files.length} · ${pct}%`), contentType);
+        await uploadToS3(data.uploadUrl, file, (pct) => setVideoStatus(`${index + 1}/${files.length} · ${pct}%`), contentType, data.cacheControl);
         setForm((current) => ({ ...current, videos: [...current.videos, data.publicUrl] }));
       }
     } catch (err) {

@@ -159,3 +159,120 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Post-inspection block in the refund modal ────────────────────────────────────────
+   Boxed off from the status form below it because it is a different decision: what the
+   customer is owed, versus confirming the money has left. */
+.orders-inspect-block {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  border-radius: 10px;
+  background: #fffaf0;
+}
+
+.orders-inspect-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4a3f35;
+}
+
+.orders-inspect-head span {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: rgba(74, 63, 53, 0.62);
+}
+
+/* Marks the fields whose contents the customer reads, so nobody writes an internal shorthand
+   into one by mistake. */
+.orders-inspect-block em,
+.orders-proof-row + em,
+label > em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  color: #a15c00;
+}
+
+.orders-inspect-block button {
+  justify-self: start;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #800020;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.orders-inspect-block button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.orders-inspect-locked {
+  margin: 0;
+  font-size: 11.5px;
+  color: rgba(74, 63, 53, 0.62);
+}
+
+/* ── Payment proof thumbnails ── */
+.orders-proof-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.orders-proof-thumb {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+}
+
+.orders-proof-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.orders-proof-thumb button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.orders-proof-add {
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgba(128, 0, 32, 0.35);
+  border-radius: 8px;
+  color: #800020;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}

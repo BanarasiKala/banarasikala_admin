@@ -87,6 +87,12 @@ export default function Orders() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [refundForm, setRefundForm] = useState({ refund_status: "Refund Paid", refund_payment_reference: "", refund_note: "" });
   const [savingRefund, setSavingRefund] = useState(false);
+  // Post-inspection adjustment. Applies to prepaid and COD alike — only the BANK DETAILS
+  // block below is COD-only, because a prepaid refund goes back to the original method.
+  const [inspectForm, setInspectForm] = useState({ inspected_amount: "", inspection_note: "" });
+  const [savingInspection, setSavingInspection] = useState(false);
+  const [proofImages, setProofImages] = useState([]);
+  const [uploadingProof, setUploadingProof] = useState(false);
   const [savingStatusId, setSavingStatusId] = useState(null);
 
   const filteredStatusOptions = useMemo(() => {
@@ -129,6 +135,74 @@ export default function Orders() {
       refund_payment_reference: order.refund_payment_reference || "",
       refund_note: order.refund_note || "",
     });
+    // Pre-filled with whatever the inspection already concluded, else the quoted amount, so
+    // the common case (nothing wrong with the return) is one click.
+    setInspectForm({
+      inspected_amount: String(order.refund_inspected_amount ?? order.refund_amount ?? ""),
+      inspection_note: order.refund_inspection_note || "",
+    });
+    setProofImages(Array.isArray(order.refund_proof_images) ? order.refund_proof_images : []);
+  };
+
+  /**
+   * The transfer screenshot / NEFT receipt. Uploaded straight to Cloudinary with a signed
+   * request, same path the seed-review images use, so nothing large passes through our API.
+   */
+  const uploadProof = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setUploadingProof(true);
+    setError("");
+    try {
+      const sigRes = await fetch(`${API_ENDPOINTS.products}/upload-signature?resourceType=image`, { headers: authHeaders() });
+      if (!sigRes.ok) throw new Error("Failed to get upload signature.");
+      const sig = await sigRes.json();
+      const uploaded = await Promise.all(files.map(async (file) => {
+        const body = new FormData();
+        body.append("file", file);
+        body.append("api_key", sig.apiKey);
+        body.append("timestamp", String(sig.timestamp));
+        body.append("signature", sig.signature);
+        body.append("folder", sig.folder);
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, { method: "POST", body });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data?.error?.message || "Upload failed.");
+        return { url: data.secure_url };
+      }));
+      setProofImages((current) => [...current, ...uploaded].slice(0, 4));
+    } catch (err) {
+      setError(err.message || "Upload failed.");
+    } finally {
+      setUploadingProof(false);
+    }
+  };
+
+  /**
+   * Record the inspection. Separate from "save refund" on purpose: deciding what the customer
+   * is owed and confirming the money left are two different acts, often days apart, and the
+   * server refuses to change the amount once it has been paid.
+   */
+  const saveInspection = async () => {
+    if (!selectedOrder?.refund_id) return;
+    setSavingInspection(true);
+    setError("");
+    try {
+      const response = await fetch(`${API_ENDPOINTS.orders}/refunds/${selectedOrder.refund_id}/inspection`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          inspected_amount: Number(inspectForm.inspected_amount),
+          inspection_note: inspectForm.inspection_note,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to record the inspection.");
+      await loadOrders();
+    } catch (err) {
+      setError(err.message || "Unable to record the inspection.");
+    } finally {
+      setSavingInspection(false);
+    }
   };
 
   const saveRefundStatus = async (event) => {
@@ -140,7 +214,9 @@ export default function Orders() {
       const response = await fetch(`${API_ENDPOINTS.orders}/${selectedOrder.id}/refund-status`, {
         method: "PATCH",
         headers: authHeaders(),
-        body: JSON.stringify(refundForm),
+        // Proof rides along with the status change — the moment it is marked paid is exactly
+        // when the receipt exists.
+        body: JSON.stringify({ ...refundForm, proof_images: proofImages }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Unable to update refund status.");
@@ -325,6 +401,48 @@ export default function Orders() {
                 )}
               </div>
             )}
+            {/* ── Inspection ──────────────────────────────────────────────────────────────
+                Prepaid and COD both. Saved on its own button, not with the form below: the
+                server refuses to change the amount once the refund is marked paid, so the
+                two steps are deliberately not one. */}
+            {selectedOrder.refund_id && (
+              <div className="orders-inspect-block">
+                <p className="orders-inspect-head">
+                  After inspection
+                  <span>Quoted {formatMoney(selectedOrder.refund_amount)}</span>
+                </p>
+                <label>
+                  Amount to refund
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    max={selectedOrder.refund_amount || undefined}
+                    value={inspectForm.inspected_amount}
+                    onChange={(event) => setInspectForm((current) => ({ ...current, inspected_amount: event.target.value }))}
+                    disabled={Boolean(selectedOrder.refund_processed_at)}
+                  />
+                </label>
+                <label>
+                  Reason — <em>shown to the customer</em>
+                  <textarea
+                    rows={2}
+                    value={inspectForm.inspection_note}
+                    onChange={(event) => setInspectForm((current) => ({ ...current, inspection_note: event.target.value }))}
+                    placeholder="e.g. Saree returned with a tear near the pallu."
+                    disabled={Boolean(selectedOrder.refund_processed_at)}
+                  />
+                </label>
+                {selectedOrder.refund_processed_at ? (
+                  <p className="orders-inspect-locked">Already paid — the amount can no longer be changed.</p>
+                ) : (
+                  <button type="button" onClick={saveInspection} disabled={savingInspection}>
+                    {savingInspection ? "Saving…" : "Record inspection"}
+                  </button>
+                )}
+              </div>
+            )}
+
             <label>
               Refund status
               <select value={refundForm.refund_status} onChange={(event) => setRefundForm((current) => ({ ...current, refund_status: event.target.value }))}>
@@ -338,6 +456,33 @@ export default function Orders() {
             <label>
               Note
               <textarea value={refundForm.refund_note} onChange={(event) => setRefundForm((current) => ({ ...current, refund_note: event.target.value }))} rows={4} />
+            </label>
+
+            {/* Transfer proof. The customer sees these — for a COD refund there is no gateway
+                record they can check themselves, and even on prepaid a screenshot answers
+                "has it actually been sent?" without a support message. */}
+            <label>
+              Payment proof — <em>shown to the customer</em>
+              <div className="orders-proof-row">
+                {proofImages.map((image, index) => (
+                  <span className="orders-proof-thumb" key={`${image.url}-${index}`}>
+                    <img src={image.url} alt="" />
+                    <button
+                      type="button"
+                      onClick={() => setProofImages((current) => current.filter((_, i) => i !== index))}
+                      aria-label="Remove"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {proofImages.length < 4 && (
+                  <label className="orders-proof-add">
+                    {uploadingProof ? "Uploading…" : "+ Add"}
+                    <input type="file" accept="image/*" multiple hidden onChange={(event) => uploadProof(event.target.files)} />
+                  </label>
+                )}
+              </div>
             </label>
             <div className="orders-modal-actions">
               <button type="button" onClick={() => setSelectedOrder(null)}>Cancel</button>

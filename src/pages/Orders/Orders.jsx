@@ -91,6 +91,10 @@ export default function Orders() {
   // block below is COD-only, because a prepaid refund goes back to the original method.
   const [inspectForm, setInspectForm] = useState({ inspected_amount: "", inspection_note: "" });
   const [savingInspection, setSavingInspection] = useState(false);
+  // Two photo sets, deliberately not one: what the inspection found, and the receipt for the
+  // money afterwards. The customer sees them under separate headings.
+  const [inspectionImages, setInspectionImages] = useState([]);
+  const [uploadingInspection, setUploadingInspection] = useState(false);
   const [proofImages, setProofImages] = useState([]);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [savingStatusId, setSavingStatusId] = useState(null);
@@ -141,34 +145,54 @@ export default function Orders() {
       inspected_amount: String(order.refund_inspected_amount ?? order.refund_amount ?? ""),
       inspection_note: order.refund_inspection_note || "",
     });
+    setInspectionImages(Array.isArray(order.refund_inspection_images) ? order.refund_inspection_images : []);
     setProofImages(Array.isArray(order.refund_proof_images) ? order.refund_proof_images : []);
   };
 
   /**
-   * The transfer screenshot / NEFT receipt. Uploaded straight to Cloudinary with a signed
-   * request, same path the seed-review images use, so nothing large passes through our API.
+   * Straight to Cloudinary with a signed request, same path the seed-review images use, so
+   * nothing large passes through our API. Shared by both photo sets on this modal.
    */
-  const uploadProof = async (fileList) => {
+  const uploadImages = async (fileList) => {
     const files = Array.from(fileList || []);
-    if (!files.length) return;
+    if (!files.length) return [];
+    const sigRes = await fetch(`${API_ENDPOINTS.products}/upload-signature?resourceType=image`, { headers: authHeaders() });
+    if (!sigRes.ok) throw new Error("Failed to get upload signature.");
+    const sig = await sigRes.json();
+    return Promise.all(files.map(async (file) => {
+      const body = new FormData();
+      body.append("file", file);
+      body.append("api_key", sig.apiKey);
+      body.append("timestamp", String(sig.timestamp));
+      body.append("signature", sig.signature);
+      body.append("folder", sig.folder);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data?.error?.message || "Upload failed.");
+      return { url: data.secure_url };
+    }));
+  };
+
+  // What the inspection found — the tear, the missing zari, the wrong colour.
+  const uploadInspectionImages = async (fileList) => {
+    setUploadingInspection(true);
+    setError("");
+    try {
+      const uploaded = await uploadImages(fileList);
+      setInspectionImages((current) => [...current, ...uploaded].slice(0, 4));
+    } catch (err) {
+      setError(err.message || "Upload failed.");
+    } finally {
+      setUploadingInspection(false);
+    }
+  };
+
+  // The transfer screenshot / NEFT receipt.
+  const uploadProof = async (fileList) => {
     setUploadingProof(true);
     setError("");
     try {
-      const sigRes = await fetch(`${API_ENDPOINTS.products}/upload-signature?resourceType=image`, { headers: authHeaders() });
-      if (!sigRes.ok) throw new Error("Failed to get upload signature.");
-      const sig = await sigRes.json();
-      const uploaded = await Promise.all(files.map(async (file) => {
-        const body = new FormData();
-        body.append("file", file);
-        body.append("api_key", sig.apiKey);
-        body.append("timestamp", String(sig.timestamp));
-        body.append("signature", sig.signature);
-        body.append("folder", sig.folder);
-        const res = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, { method: "POST", body });
-        const data = await res.json();
-        if (!res.ok || data.error) throw new Error(data?.error?.message || "Upload failed.");
-        return { url: data.secure_url };
-      }));
+      const uploaded = await uploadImages(fileList);
       setProofImages((current) => [...current, ...uploaded].slice(0, 4));
     } catch (err) {
       setError(err.message || "Upload failed.");
@@ -193,6 +217,7 @@ export default function Orders() {
         body: JSON.stringify({
           inspected_amount: Number(inspectForm.inspected_amount),
           inspection_note: inspectForm.inspection_note,
+          inspection_images: inspectionImages,
         }),
       });
       const data = await response.json();
@@ -389,15 +414,20 @@ export default function Orders() {
             </div>
             {selectedOrder.payment_method === "COD" && (
               <div className="orders-bank-box">
-                <strong>Customer bank details</strong>
-                {selectedOrder.refund_bank_details ? (
+                <strong>Where to send the refund</strong>
+                {!selectedOrder.refund_bank_details ? (
+                  <span>Not submitted yet.</span>
+                ) : selectedOrder.refund_bank_details.method === "upi" ? (
+                  <>
+                    <span>UPI</span>
+                    <span>{selectedOrder.refund_bank_details.upi_id}</span>
+                  </>
+                ) : (
                   <>
                     <span>{selectedOrder.refund_bank_details.account_holder_name}</span>
                     <span>{selectedOrder.refund_bank_details.bank_name} · {selectedOrder.refund_bank_details.ifsc_code}</span>
                     <span>Account ending {selectedOrder.refund_bank_details.account_number_last4}</span>
                   </>
-                ) : (
-                  <span>Bank details not submitted yet.</span>
                 )}
               </div>
             )}
@@ -432,6 +462,34 @@ export default function Orders() {
                     placeholder="e.g. Saree returned with a tear near the pallu."
                     disabled={Boolean(selectedOrder.refund_processed_at)}
                   />
+                </label>
+                {/* The damage itself. A written reason alone is one party's word against the
+                    other's; the photo is what makes a reduced refund arguable rather than
+                    arbitrary. Stored apart from the transfer receipt below. */}
+                <label>
+                  Photos of the damage — <em>shown to the customer</em>
+                  <div className="orders-proof-row">
+                    {inspectionImages.map((image, index) => (
+                      <span className="orders-proof-thumb" key={`${image.url}-${index}`}>
+                        <img src={image.url} alt="" />
+                        {!selectedOrder.refund_processed_at && (
+                          <button
+                            type="button"
+                            onClick={() => setInspectionImages((current) => current.filter((_, i) => i !== index))}
+                            aria-label="Remove"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                    {inspectionImages.length < 4 && !selectedOrder.refund_processed_at && (
+                      <label className="orders-proof-add">
+                        {uploadingInspection ? "Uploading…" : "+ Add"}
+                        <input type="file" accept="image/*" multiple hidden onChange={(event) => uploadInspectionImages(event.target.files)} />
+                      </label>
+                    )}
+                  </div>
                 </label>
                 {selectedOrder.refund_processed_at ? (
                   <p className="orders-inspect-locked">Already paid — the amount can no longer be changed.</p>

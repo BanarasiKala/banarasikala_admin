@@ -261,6 +261,16 @@ export default function OrderActions({ type = "return" }) {
                 <td className="px-5 py-4 font-bold">{row.quantity}</td>
                 <td className="px-5 py-4">
                   <div>{formatMoney(row.estimated_refund_amount)}</div>
+                  {/* An inspection lowered it. The quote stays visible struck through: the
+                      difference is what the customer will ask about, so the person paying
+                      should not have to open another page to see it. */}
+                  {type === "return" && row.refund_inspected_amount != null
+                    && row.refund_inspected_amount < row.refund_quoted_amount && (
+                    <div className="mt-1 text-[10px] font-bold text-amber-700">
+                      <span className="line-through text-gray-400">{formatMoney(row.refund_quoted_amount)}</span>
+                      {" "}quoted · reduced after inspection
+                    </div>
+                  )}
                   {type === "return" && (
                     <div className="mt-1 text-[10px] text-gray-400">
                       Pickup {formatMoney(row.reverse_shipping_deduction)} · Coupon adj {formatMoney(row.meta?.coupon_adjustment || 0)}
@@ -272,13 +282,22 @@ export default function OrderActions({ type = "return" }) {
                   {type === "return" && row.Order?.payment_method === "COD" && (
                     row.refund_bank_details ? (
                       <div className="mt-2 rounded-lg bg-green-50 px-2.5 py-2 text-[10px] leading-relaxed text-green-900">
-                        <div className="font-bold uppercase text-green-700">Bank details submitted</div>
-                        <div>{row.refund_bank_details.account_holder_name}</div>
-                        <div className="font-mono">{row.refund_bank_details.account_number} · {row.refund_bank_details.ifsc_code}</div>
-                        <div>{row.refund_bank_details.bank_name}{row.refund_bank_details.branch_name ? ` · ${row.refund_bank_details.branch_name}` : ""}</div>
+                        {row.refund_bank_details.method === "upi" ? (
+                          <>
+                            <div className="font-bold uppercase text-green-700">UPI ID submitted</div>
+                            <div className="font-mono">{row.refund_bank_details.upi_id}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-bold uppercase text-green-700">Bank details submitted</div>
+                            <div>{row.refund_bank_details.account_holder_name}</div>
+                            <div className="font-mono">{row.refund_bank_details.account_number} · {row.refund_bank_details.ifsc_code}</div>
+                            <div>{row.refund_bank_details.bank_name}{row.refund_bank_details.branch_name ? ` · ${row.refund_bank_details.branch_name}` : ""}</div>
+                          </>
+                        )}
                       </div>
                     ) : String(row.refund_status || "").toLowerCase().includes("bank") ? (
-                      <div className="mt-2 text-[10px] font-bold uppercase text-amber-600">Awaiting customer bank details</div>
+                      <div className="mt-2 text-[10px] font-bold uppercase text-amber-600">Awaiting refund account</div>
                     ) : null
                   )}
                 </td>
@@ -305,15 +324,26 @@ export default function OrderActions({ type = "return" }) {
                       </>
                     )}
                     {type === "return" && row.status === "Completed" && !row.refund_initiated && (
-                      <button
-                        type="button"
-                        disabled={savingId === row.id}
-                        onClick={() => initiateRefund(row.id)}
-                        className="rounded bg-[#800020] px-3 py-1.5 text-[10px] font-bold uppercase text-white"
-                      >
-                        <IndianRupee className="mr-1 inline h-3 w-3" />
-                        {savingId === row.id ? "Initiating..." : `Initiate Refund ${formatMoney(row.estimated_refund_amount)}`}
-                      </button>
+                      <div className="flex flex-col items-end gap-1">
+                        {/* Initiating is the point of no return for the amount — the server
+                            refuses an inspection afterwards, and on a prepaid order the money
+                            has already gone to Razorpay by then. Say so before the click, not
+                            in an error after it. */}
+                        {!row.refund_inspected_at && (
+                          <span className="text-[10px] font-bold uppercase text-amber-600">
+                            Parcel not inspected yet
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          disabled={savingId === row.id}
+                          onClick={() => initiateRefund(row.id)}
+                          className="rounded bg-[#800020] px-3 py-1.5 text-[10px] font-bold uppercase text-white"
+                        >
+                          <IndianRupee className="mr-1 inline h-3 w-3" />
+                          {savingId === row.id ? "Initiating..." : `Initiate Refund ${formatMoney(row.estimated_refund_amount)}`}
+                        </button>
+                      </div>
                     )}
                     {type === "return" && row.status === "Completed" && row.refund_initiated && (
                       <span className="rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase text-green-700">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, IndianRupee, RefreshCw, RotateCcw, XCircle } from "lucide-react";
+import { CheckCircle2, IndianRupee, RefreshCw, RotateCcw, Search, XCircle } from "lucide-react";
 import API_ENDPOINTS from "../../config/api";
 
 const ACTION_LABELS = {
@@ -49,6 +49,20 @@ export default function OrderActions({ type = "return" }) {
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  /**
+   * Inspection, handled here rather than on the Orders page.
+   *
+   * Deciding what the customer is owed and paying it are two halves of the same job, and they
+   * used to live on two different screens — inspect under Orders → Refund, initiate under
+   * Returns — with only a warning to keep them in order. Both now sit on the row they belong
+   * to, so the sequence is the layout rather than a caution the admin can read past.
+   */
+  const [inspectRow, setInspectRow] = useState(null);
+  const [inspectForm, setInspectForm] = useState({ inspected_amount: "", inspection_note: "" });
+  const [inspectionImages, setInspectionImages] = useState([]);
+  const [uploadingInspection, setUploadingInspection] = useState(false);
+  const [savingInspection, setSavingInspection] = useState(false);
+  const [inspectError, setInspectError] = useState("");
   const Icon = ACTION_ICONS[type] || RotateCcw;
   const title = ACTION_LABELS[type] || "Order Requests";
 
@@ -95,6 +109,74 @@ export default function OrderActions({ type = "return" }) {
       setError(err.message || "Unable to update request.");
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const openInspect = (row) => {
+    setInspectRow(row);
+    // Pre-filled with whatever the inspection already concluded, else the quote — so the
+    // common case, a return with nothing wrong with it, is one click.
+    setInspectForm({
+      inspected_amount: String(row.refund_inspected_amount ?? row.refund_quoted_amount ?? row.estimated_refund_amount ?? ""),
+      inspection_note: row.refund_inspection_note || "",
+    });
+    setInspectionImages(Array.isArray(row.refund_inspection_images) ? row.refund_inspection_images : []);
+    setInspectError("");
+  };
+
+  // Signed Cloudinary upload, the same path the seed-review images use, so nothing large
+  // passes through our API.
+  const uploadInspectionImages = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setUploadingInspection(true);
+    setInspectError("");
+    try {
+      const sigRes = await fetch(`${API_ENDPOINTS.products}/upload-signature?resourceType=image`, { headers: authHeaders() });
+      if (!sigRes.ok) throw new Error("Failed to get upload signature.");
+      const sig = await sigRes.json();
+      const uploaded = await Promise.all(files.map(async (file) => {
+        const body = new FormData();
+        body.append("file", file);
+        body.append("api_key", sig.apiKey);
+        body.append("timestamp", String(sig.timestamp));
+        body.append("signature", sig.signature);
+        body.append("folder", sig.folder);
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, { method: "POST", body });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data?.error?.message || "Upload failed.");
+        return { url: data.secure_url };
+      }));
+      setInspectionImages((current) => [...current, ...uploaded].slice(0, 4));
+    } catch (err) {
+      setInspectError(err.message || "Upload failed.");
+    } finally {
+      setUploadingInspection(false);
+    }
+  };
+
+  const saveInspection = async () => {
+    if (!inspectRow?.refund_id) return;
+    setSavingInspection(true);
+    setInspectError("");
+    try {
+      const response = await fetch(`${API_ENDPOINTS.orders}/refunds/${inspectRow.refund_id}/inspection`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          inspected_amount: Number(inspectForm.inspected_amount),
+          inspection_note: inspectForm.inspection_note,
+          inspection_images: inspectionImages,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to record the inspection.");
+      setInspectRow(null);
+      await loadRows();
+    } catch (err) {
+      setInspectError(err.message || "Unable to record the inspection.");
+    } finally {
+      setSavingInspection(false);
     }
   };
 
@@ -323,16 +405,24 @@ export default function OrderActions({ type = "return" }) {
                         </button>
                       </>
                     )}
+                    {/* Inspect, then pay — in that order, left to right, on the row itself.
+                        The two used to live on separate screens with only a warning to keep
+                        them in sequence; now the screen reads in the order the job is done. */}
                     {type === "return" && row.status === "Completed" && !row.refund_initiated && (
-                      <div className="flex flex-col items-end gap-1">
-                        {/* Initiating is the point of no return for the amount — the server
-                            refuses an inspection afterwards, and on a prepaid order the money
-                            has already gone to Razorpay by then. Say so before the click, not
-                            in an error after it. */}
-                        {!row.refund_inspected_at && (
-                          <span className="text-[10px] font-bold uppercase text-amber-600">
-                            Parcel not inspected yet
-                          </span>
+                      <div className="flex items-center gap-2">
+                        {row.refund_id && (
+                          <button
+                            type="button"
+                            onClick={() => openInspect(row)}
+                            className={`rounded px-3 py-1.5 text-[10px] font-bold uppercase ${
+                              row.refund_inspected_at
+                                ? "border border-[#800020]/20 bg-white text-[#800020]"
+                                : "border border-amber-300 bg-amber-50 text-amber-700"
+                            }`}
+                          >
+                            <Search className="mr-1 inline h-3 w-3" />
+                            {row.refund_inspected_at ? "Inspected" : "Inspect parcel"}
+                          </button>
                         )}
                         <button
                           type="button"
@@ -386,6 +476,108 @@ export default function OrderActions({ type = "return" }) {
           </tbody>
         </table>
       </div>
+
+      {/* Scrolls itself and caps its height: the refund modal on the Orders page grew past the
+          viewport once this same block landed on it, and a fixed backdrop cannot scroll, so
+          everything below the fold became unreachable. */}
+      {inspectRow && (
+        <div
+          className="fixed inset-0 z-[80] grid place-items-center bg-[#31180d]/40 p-5 backdrop-blur-sm"
+          onClick={() => !savingInspection && setInspectRow(null)}
+        >
+          <form
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => { event.preventDefault(); saveInspection(); }}
+            className="grid max-h-[calc(100vh-40px)] w-[min(480px,100%)] gap-4 overflow-y-auto rounded-2xl border border-[#800020]/15 bg-[#FFFDF8] p-6 shadow-2xl"
+          >
+            <div>
+              <h3 className="text-lg font-bold text-[#800020]">Inspect returned parcel</h3>
+              <p className="mt-1 text-[11px] text-gray-500">
+                {inspectRow.Order?.order_number || `#${inspectRow.order_id}`}
+                {inspectRow.Order?.customer_name ? ` · ${inspectRow.Order.customer_name}` : ""}
+              </p>
+            </div>
+
+            {inspectError && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700">{inspectError}</p>
+            )}
+
+            <div className="flex items-center justify-between rounded-lg bg-[#FAF8F6] px-3 py-2 text-[11px]">
+              <span className="font-bold uppercase tracking-wider text-gray-500">Quoted</span>
+              <span className="font-bold text-[#4A3F35]">{formatMoney(inspectRow.refund_quoted_amount ?? inspectRow.estimated_refund_amount)}</span>
+            </div>
+
+            <label className="grid gap-1.5 text-[11px] font-bold text-[#4A3F35]">
+              Amount to refund
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                max={inspectRow.refund_quoted_amount || undefined}
+                value={inspectForm.inspected_amount}
+                onChange={(event) => setInspectForm((current) => ({ ...current, inspected_amount: event.target.value }))}
+                className="w-full rounded-lg border border-[#800020]/15 bg-[#FFFAF1] px-3 py-2.5 font-normal text-[#4A3F35] outline-none"
+              />
+              <span className="font-normal text-gray-400">An inspection can only lower the refund, never raise it.</span>
+            </label>
+
+            <label className="grid gap-1.5 text-[11px] font-bold text-[#4A3F35]">
+              Reason <em className="not-italic font-normal text-amber-700">— shown to the customer</em>
+              <textarea
+                rows={2}
+                value={inspectForm.inspection_note}
+                onChange={(event) => setInspectForm((current) => ({ ...current, inspection_note: event.target.value }))}
+                placeholder="e.g. Saree returned with a tear near the pallu."
+                className="w-full rounded-lg border border-[#800020]/15 bg-[#FFFAF1] px-3 py-2.5 font-normal text-[#4A3F35] outline-none"
+              />
+              <span className="font-normal text-gray-400">Required whenever the amount is below the quote.</span>
+            </label>
+
+            <div className="grid gap-1.5 text-[11px] font-bold text-[#4A3F35]">
+              Photos of the damage <em className="not-italic font-normal text-amber-700">— shown to the customer</em>
+              <div className="flex flex-wrap gap-2">
+                {inspectionImages.map((image, index) => (
+                  <span key={`${image.url}-${index}`} className="relative h-14 w-14 overflow-hidden rounded-lg border border-[#800020]/15">
+                    <img src={image.url} alt="" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setInspectionImages((current) => current.filter((_, i) => i !== index))}
+                      className="absolute right-0 top-0 h-4 w-4 rounded-bl bg-black/60 text-[10px] leading-none text-white"
+                      aria-label="Remove"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {inspectionImages.length < 4 && (
+                  <label className="grid h-14 w-14 cursor-pointer place-items-center rounded-lg border border-dashed border-[#800020]/30 text-[10px] font-bold text-[#800020]">
+                    {uploadingInspection ? "..." : "+ Add"}
+                    <input type="file" accept="image/*" multiple hidden onChange={(event) => uploadInspectionImages(event.target.files)} />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div className="sticky bottom-[-24px] -mx-6 -mb-6 flex justify-end gap-2 border-t border-[#800020]/10 bg-[#FFFDF8] px-6 pb-6 pt-3.5">
+              <button
+                type="button"
+                onClick={() => setInspectRow(null)}
+                disabled={savingInspection}
+                className="rounded-full border border-[#800020]/20 bg-white px-4 py-2 text-[10px] font-bold uppercase text-[#800020]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingInspection}
+                className="rounded-full bg-[#800020] px-4 py-2 text-[10px] font-bold uppercase text-white disabled:opacity-60"
+              >
+                {savingInspection ? "Saving…" : "Record inspection"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   );
 }

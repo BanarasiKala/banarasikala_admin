@@ -80,6 +80,15 @@
   background: #fffdf8;
   border: 1px solid rgba(128, 0, 32, 0.16);
   box-shadow: 0 24px 64px rgba(49, 24, 13, 0.18);
+  /* The modal outgrew the screen when the inspection block landed on it — amount, reason,
+     photos and a button, on top of the refund fields that were already here. The backdrop is
+     position:fixed and cannot scroll, so everything past the fold was simply unreachable:
+     the refund status, the payment reference, the note, the proof uploader and Save. The
+     modal scrolls itself instead. 40px = the backdrop's 20px padding, top and bottom. */
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  /* Stops the page behind from taking over the scroll once the modal hits its end. */
+  overscroll-behavior: contain;
 }
 
 .orders-refund-modal h3 {
@@ -131,7 +140,19 @@
   font-size: 13px;
 }
 
+/* Cancel/Save stay on screen while the body scrolls. Without this, confirming a refund meant
+   scrolling past four fields you had just filled in to reach the button.
+   The negative margins let the bar span the modal's 24px padding, and bottom:-24px offsets it
+   by that same padding so it pins flush to the modal's bottom edge rather than floating above
+   it. */
 .orders-modal-actions {
+  position: sticky;
+  bottom: -24px;
+  z-index: 1;
+  margin: 0 -24px -24px;
+  padding: 14px 24px 24px;
+  background: #fffdf8;
+  border-top: 1px solid rgba(128, 0, 32, 0.1);
   display: flex;
   justify-content: flex-end;
   gap: 10px;

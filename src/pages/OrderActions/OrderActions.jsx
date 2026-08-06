@@ -73,6 +73,21 @@ export default function OrderActions({ type = "return" }) {
   const [uploadingInspection, setUploadingInspection] = useState(false);
   const [savingInspection, setSavingInspection] = useState(false);
   const [inspectError, setInspectError] = useState("");
+  /**
+   * Settling the money — the last step of a return or a refused exchange, and the one that
+   * used to live on the Orders page.
+   *
+   * Sending the transfer and recording that it was sent are one job, so splitting them
+   * across two screens meant every refund ended with a hunt for the order, a second modal
+   * and a re-read of the bank details already shown here. The whole flow now finishes in
+   * the tab it started in.
+   */
+  const [payRow, setPayRow] = useState(null);
+  const [payForm, setPayForm] = useState({ refund_status: "Refund Paid", refund_payment_reference: "", refund_note: "" });
+  const [proofImages, setProofImages] = useState([]);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const [savingPay, setSavingPay] = useState(false);
+  const [payError, setPayError] = useState("");
   const Icon = ACTION_ICONS[type] || RotateCcw;
   const title = ACTION_LABELS[type] || "Order Requests";
 
@@ -141,13 +156,19 @@ export default function OrderActions({ type = "return" }) {
     setInspectError("");
   };
 
-  // Signed Cloudinary upload, the same path the seed-review images use, so nothing large
-  // passes through our API.
-  const uploadInspectionImages = async (fileList) => {
+  /**
+   * Signed Cloudinary upload, the same path the seed-review images use, so nothing large
+   * passes through our API.
+   *
+   * `onDone` and `onError` are passed in because this now serves two forms — the inspection's
+   * damage photos and the payment's transfer receipt — which write different state and
+   * surface their errors in different modals.
+   */
+  const uploadImages = async (fileList, { onDone, onError, setBusy }) => {
     const files = Array.from(fileList || []);
     if (!files.length) return;
-    setUploadingInspection(true);
-    setInspectError("");
+    setBusy(true);
+    onError("");
     try {
       const sigRes = await fetch(`${API_ENDPOINTS.products}/upload-signature?resourceType=image`, { headers: authHeaders() });
       if (!sigRes.ok) throw new Error("Failed to get upload signature.");
@@ -164,13 +185,25 @@ export default function OrderActions({ type = "return" }) {
         if (!res.ok || data.error) throw new Error(data?.error?.message || "Upload failed.");
         return { url: data.secure_url };
       }));
-      setInspectionImages((current) => [...current, ...uploaded].slice(0, 4));
+      onDone(uploaded);
     } catch (err) {
-      setInspectError(err.message || "Upload failed.");
+      onError(err.message || "Upload failed.");
     } finally {
-      setUploadingInspection(false);
+      setBusy(false);
     }
   };
+
+  const uploadInspectionImages = (fileList) => uploadImages(fileList, {
+    onDone: (uploaded) => setInspectionImages((current) => [...current, ...uploaded].slice(0, 4)),
+    onError: setInspectError,
+    setBusy: setUploadingInspection,
+  });
+
+  const uploadProofImages = (fileList) => uploadImages(fileList, {
+    onDone: (uploaded) => setProofImages((current) => [...current, ...uploaded].slice(0, 4)),
+    onError: setPayError,
+    setBusy: setUploadingProof,
+  });
 
   const saveInspection = async () => {
     const isExchange = type === "exchange";
@@ -209,6 +242,47 @@ export default function OrderActions({ type = "return" }) {
       setInspectError(err.message || "Unable to record the inspection.");
     } finally {
       setSavingInspection(false);
+    }
+  };
+
+  const openPay = (row) => {
+    setPayRow(row);
+    setPayForm({
+      refund_status: row.refund_status && String(row.refund_status).toLowerCase().includes("paid")
+        ? row.refund_status
+        : "Refund Paid",
+      refund_payment_reference: row.refund_payment_reference || "",
+      refund_note: "",
+    });
+    setProofImages(Array.isArray(row.refund_proof_images) ? row.refund_proof_images : []);
+    setPayError("");
+  };
+
+  const savePayment = async () => {
+    if (!payRow) return;
+    setSavingPay(true);
+    setPayError("");
+    try {
+      const response = await fetch(`${API_ENDPOINTS.orders}/${payRow.order_id}/refund-status`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          // Names the row this queue is showing. Without it the server settles the most
+          // recent refund on the order, which on an order carrying both a return and a
+          // refused exchange is not necessarily this one.
+          refund_id: payRow.refund_id,
+          ...payForm,
+          proof_images: proofImages,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to record the payment.");
+      setPayRow(null);
+      await loadRows();
+    } catch (err) {
+      setPayError(err.message || "Unable to record the payment.");
+    } finally {
+      setSavingPay(false);
     }
   };
 
@@ -467,7 +541,25 @@ export default function OrderActions({ type = "return" }) {
                         </button>
                       </div>
                     )}
-                    {type === "return" && row.status === "Completed" && row.refund_initiated && (
+                    {/* Initiated but not yet settled — the last step, and it now finishes
+                        here. Prepaid refunds usually settle themselves through the gateway,
+                        so this is mostly the COD path, but it stays available for both: a
+                        gateway refund that failed has to be recorded by hand too. */}
+                    {row.refund_initiated && !row.refund_processed_at && (
+                      <button
+                        type="button"
+                        onClick={() => openPay(row)}
+                        className="rounded border border-[#800020]/25 bg-white px-3 py-1.5 text-[10px] font-bold uppercase text-[#800020]"
+                      >
+                        <IndianRupee className="mr-1 inline h-3 w-3" /> Record payment
+                      </button>
+                    )}
+                    {row.refund_initiated && row.refund_processed_at && (
+                      <span className="rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase text-green-700">
+                        <CheckCircle2 className="mr-1 inline h-3 w-3" /> Refund Paid
+                      </span>
+                    )}
+                    {type === "return" && row.status === "Completed" && row.refund_initiated && !row.refund_processed_at && (
                       <span className="rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase text-green-700">
                         <CheckCircle2 className="mr-1 inline h-3 w-3" /> Refund Initiated
                       </span>
@@ -500,7 +592,7 @@ export default function OrderActions({ type = "return" }) {
                         {savingId === row.id ? "Initiating..." : `Initiate Refund ${formatMoney(row.estimated_refund_amount)}`}
                       </button>
                     )}
-                    {type === "exchange" && row.status === "Rejected" && row.refund_initiated && (
+                    {type === "exchange" && row.status === "Rejected" && row.refund_initiated && !row.refund_processed_at && (
                       <span className="rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase text-green-700">
                         <CheckCircle2 className="mr-1 inline h-3 w-3" /> Refund Initiated
                       </span>
@@ -689,6 +781,148 @@ export default function OrderActions({ type = "return" }) {
                 className="rounded-full bg-[#800020] px-4 py-2 text-[10px] font-bold uppercase text-white disabled:opacity-60"
               >
                 {savingInspection ? "Saving…" : "Record inspection"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── Record payment ────────────────────────────────────────────────────────────────
+          Where the refund is closed out: the destination, the reference, and the receipt.
+          It shows the customer's account details rather than making the admin go and find
+          them, because this is the screen on which the transfer is actually made. */}
+      {payRow && (
+        <div
+          className="fixed inset-0 z-[80] grid place-items-center bg-[#31180d]/40 p-5 backdrop-blur-sm"
+          onClick={() => !savingPay && setPayRow(null)}
+        >
+          <form
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => { event.preventDefault(); savePayment(); }}
+            className="grid max-h-[calc(100vh-40px)] w-[min(480px,100%)] gap-4 overflow-y-auto rounded-2xl border border-[#800020]/15 bg-[#FFFDF8] p-6 shadow-2xl"
+          >
+            <div>
+              <h3 className="text-lg font-bold text-[#800020]">Record refund payment</h3>
+              <p className="mt-1 text-[11px] text-gray-500">
+                {payRow.Order?.order_number || `#${payRow.order_id}`}
+                {payRow.Order?.customer_name ? ` · ${payRow.Order.customer_name}` : ""}
+              </p>
+            </div>
+
+            {payError && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700">{payError}</p>
+            )}
+
+            <div className="flex items-center justify-between rounded-lg bg-[#FAF8F6] px-3 py-2 text-[11px]">
+              <span className="font-bold uppercase tracking-wider text-gray-500">Amount</span>
+              <span className="font-bold text-[#4A3F35]">{formatMoney(payRow.estimated_refund_amount)}</span>
+            </div>
+
+            {/* Where the money goes. A COD customer supplies this on their order page; a
+                prepaid one has none, because the gateway sends it back to the card. */}
+            <div className="rounded-lg border border-[#800020]/10 bg-white px-3 py-2.5 text-[11px] text-[#4A3F35]">
+              <div className="mb-1 font-bold uppercase tracking-wider text-gray-500">Where to send it</div>
+              {!payRow.refund_bank_details ? (
+                <p className="text-gray-500">
+                  No account on file — a prepaid refund goes back to the original payment method
+                  automatically. For a COD refund, the customer has not filled this in yet.
+                </p>
+              ) : payRow.refund_bank_details.method === "upi" ? (
+                <p className="font-mono">{payRow.refund_bank_details.upi_id}</p>
+              ) : (
+                <div className="grid gap-0.5">
+                  <span>{payRow.refund_bank_details.account_holder_name}</span>
+                  <span>{payRow.refund_bank_details.bank_name} · {payRow.refund_bank_details.ifsc_code}</span>
+                  <span>Account ending {payRow.refund_bank_details.account_number_last4}</span>
+                </div>
+              )}
+            </div>
+
+            <label className="grid gap-1.5 text-[11px] font-bold text-[#4A3F35]">
+              Status
+              <select
+                value={payForm.refund_status}
+                onChange={(event) => setPayForm((current) => ({ ...current, refund_status: event.target.value }))}
+                className="w-full rounded-lg border border-[#800020]/15 bg-[#FFFAF1] px-3 py-2.5 font-normal text-[#4A3F35] outline-none"
+              >
+                <option>Refund Paid</option>
+                <option>Processing</option>
+                <option>Failed</option>
+              </select>
+              <span className="font-normal text-gray-400">
+                Marking it paid stamps the date and locks the amount — it cannot be edited afterwards.
+              </span>
+            </label>
+
+            <label className="grid gap-1.5 text-[11px] font-bold text-[#4A3F35]">
+              Payment reference
+              <input
+                value={payForm.refund_payment_reference}
+                onChange={(event) => setPayForm((current) => ({ ...current, refund_payment_reference: event.target.value }))}
+                placeholder="Bank UTR / Razorpay refund id"
+                className="w-full rounded-lg border border-[#800020]/15 bg-[#FFFAF1] px-3 py-2.5 font-normal text-[#4A3F35] outline-none"
+              />
+            </label>
+
+            <label className="grid gap-1.5 text-[11px] font-bold text-[#4A3F35]">
+              Note <em className="not-italic font-normal text-amber-700">— shown to the customer</em>
+              <textarea
+                rows={2}
+                value={payForm.refund_note}
+                onChange={(event) => setPayForm((current) => ({ ...current, refund_note: event.target.value }))}
+                className="w-full rounded-lg border border-[#800020]/15 bg-[#FFFAF1] px-3 py-2.5 font-normal text-[#4A3F35] outline-none"
+              />
+            </label>
+
+            {/* The transfer receipt. On a COD refund this is the ONLY evidence the customer
+                will ever have that the money was sent — there is no gateway record for them
+                to look up. */}
+            <div className="grid gap-1.5 text-[11px] font-bold text-[#4A3F35]">
+              Payment proof
+              <div className="flex flex-wrap items-center gap-2">
+                {proofImages.map((image, index) => (
+                  <span key={image.url} className="relative">
+                    <img src={image.url} alt="" className="h-14 w-14 rounded-lg border border-[#800020]/15 object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setProofImages((current) => current.filter((_, i) => i !== index))}
+                      className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-white text-[10px] font-bold text-red-600 shadow"
+                      aria-label="Remove photo"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {proofImages.length < 4 && (
+                  <label className="grid h-14 w-14 cursor-pointer place-items-center rounded-lg border border-dashed border-[#800020]/30 text-[10px] font-bold text-[#800020]">
+                    {uploadingProof ? "…" : "+"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(event) => uploadProofImages(event.target.files)}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPayRow(null)}
+                disabled={savingPay}
+                className="rounded-lg border border-[#800020]/15 px-4 py-2 text-[11px] font-bold uppercase text-gray-500"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingPay || uploadingProof}
+                className="rounded-lg bg-[#800020] px-4 py-2 text-[11px] font-bold uppercase text-white"
+              >
+                {savingPay ? "Saving…" : "Save"}
               </button>
             </div>
           </form>

@@ -58,6 +58,16 @@ export default function OrderActions({ type = "return" }) {
    * to, so the sequence is the layout rather than a caution the admin can read past.
    */
   const [inspectRow, setInspectRow] = useState(null);
+  /**
+   * Exchanges only: did the returned saree pass?
+   *
+   * A return's inspection asks "how much?" — the swap is happening either way. An exchange's
+   * asks a yes/no question FIRST, because a failure does not adjust the exchange, it cancels
+   * it and turns it into a refund. Same modal, because it is the same job (open the parcel,
+   * write down what you found, attach photos); the verdict switch is what changes what the
+   * rest of the form means.
+   */
+  const [inspectVerdict, setInspectVerdict] = useState("pass");
   const [inspectForm, setInspectForm] = useState({ inspected_amount: "", inspection_note: "" });
   const [inspectionImages, setInspectionImages] = useState([]);
   const [uploadingInspection, setUploadingInspection] = useState(false);
@@ -114,10 +124,17 @@ export default function OrderActions({ type = "return" }) {
 
   const openInspect = (row) => {
     setInspectRow(row);
-    // Pre-filled with whatever the inspection already concluded, else the quote — so the
-    // common case, a return with nothing wrong with it, is one click.
+    // Both defaults assume the happy path, which is overwhelmingly the common one: a return
+    // with nothing wrong pays the quote, an exchange with nothing wrong passes. Either is
+    // one click.
+    setInspectVerdict("pass");
     setInspectForm({
-      inspected_amount: String(row.refund_inspected_amount ?? row.refund_quoted_amount ?? row.estimated_refund_amount ?? ""),
+      inspected_amount: type === "exchange"
+        // Nothing is owed unless the exchange is refused, and then it is the admin's call —
+        // so this starts EMPTY rather than pre-filled with the goods value, which would
+        // invite refunding the full price by simply not editing the field.
+        ? ""
+        : String(row.refund_inspected_amount ?? row.refund_quoted_amount ?? row.estimated_refund_amount ?? ""),
       inspection_note: row.refund_inspection_note || "",
     });
     setInspectionImages(Array.isArray(row.refund_inspection_images) ? row.refund_inspection_images : []);
@@ -156,19 +173,34 @@ export default function OrderActions({ type = "return" }) {
   };
 
   const saveInspection = async () => {
-    if (!inspectRow?.refund_id) return;
+    const isExchange = type === "exchange";
+    // A return's inspection edits an existing refund row, so it needs one to exist. An
+    // exchange's is keyed by the ACTION — the refund row may still be the 0 / "Not Required"
+    // placeholder, and it is this call that turns it into a real payout.
+    if (!inspectRow || (!isExchange && !inspectRow.refund_id)) return;
     setSavingInspection(true);
     setInspectError("");
     try {
-      const response = await fetch(`${API_ENDPOINTS.orders}/refunds/${inspectRow.refund_id}/inspection`, {
-        method: "PATCH",
-        headers: authHeaders(),
-        body: JSON.stringify({
-          inspected_amount: Number(inspectForm.inspected_amount),
-          inspection_note: inspectForm.inspection_note,
-          inspection_images: inspectionImages,
-        }),
-      });
+      const response = isExchange
+        ? await fetch(`${API_ENDPOINTS.orders}/admin/item-actions/${inspectRow.id}/exchange-inspection`, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({
+            passed: inspectVerdict === "pass",
+            note: inspectForm.inspection_note,
+            inspection_images: inspectionImages,
+            refund_amount: Number(inspectForm.inspected_amount || 0),
+          }),
+        })
+        : await fetch(`${API_ENDPOINTS.orders}/refunds/${inspectRow.refund_id}/inspection`, {
+          method: "PATCH",
+          headers: authHeaders(),
+          body: JSON.stringify({
+            inspected_amount: Number(inspectForm.inspected_amount),
+            inspection_note: inspectForm.inspection_note,
+            inspection_images: inspectionImages,
+          }),
+        });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Unable to record the inspection.");
       setInspectRow(null);
@@ -440,6 +472,40 @@ export default function OrderActions({ type = "return" }) {
                         <CheckCircle2 className="mr-1 inline h-3 w-3" /> Refund Initiated
                       </span>
                     )}
+                    {/* The parcel is back and undecided — this is the gate that did not exist
+                        before, and the only thing offered in this state. Shipping a
+                        replacement is deliberately NOT reachable from here: it is what the
+                        verdict unlocks. */}
+                    {type === "exchange" && row.status === "Received" && (
+                      <button
+                        type="button"
+                        onClick={() => openInspect(row)}
+                        className="rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-[10px] font-bold uppercase text-amber-700"
+                      >
+                        <Search className="mr-1 inline h-3 w-3" />
+                        Inspect parcel
+                      </button>
+                    )}
+
+                    {/* Refused after inspection — no goods will ship, so the only remaining
+                        job is paying the customer. Same button, same endpoint as a return. */}
+                    {type === "exchange" && row.status === "Rejected" && Number(row.estimated_refund_amount) > 0 && !row.refund_initiated && (
+                      <button
+                        type="button"
+                        disabled={savingId === row.id}
+                        onClick={() => initiateRefund(row.id)}
+                        className="rounded bg-[#800020] px-3 py-1.5 text-[10px] font-bold uppercase text-white"
+                      >
+                        <IndianRupee className="mr-1 inline h-3 w-3" />
+                        {savingId === row.id ? "Initiating..." : `Initiate Refund ${formatMoney(row.estimated_refund_amount)}`}
+                      </button>
+                    )}
+                    {type === "exchange" && row.status === "Rejected" && row.refund_initiated && (
+                      <span className="rounded-full bg-green-50 px-3 py-1.5 text-[10px] font-bold uppercase text-green-700">
+                        <CheckCircle2 className="mr-1 inline h-3 w-3" /> Refund Initiated
+                      </span>
+                    )}
+
                     {type === "exchange" && row.status === "Completed" && !row.replacement_shipment_id && (
                       <button
                         type="button"
@@ -502,24 +568,70 @@ export default function OrderActions({ type = "return" }) {
               <p className="rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700">{inspectError}</p>
             )}
 
-            <div className="flex items-center justify-between rounded-lg bg-[#FAF8F6] px-3 py-2 text-[11px]">
-              <span className="font-bold uppercase tracking-wider text-gray-500">Quoted</span>
-              <span className="font-bold text-[#4A3F35]">{formatMoney(inspectRow.refund_quoted_amount ?? inspectRow.estimated_refund_amount)}</span>
-            </div>
+            {/* ── Exchange: the verdict comes first, because it decides what the rest of
+                   this form means. Passing needs nothing else; refusing needs an amount,
+                   a reason and photos. ── */}
+            {type === "exchange" ? (
+              <div className="grid gap-2">
+                <span className="text-[11px] font-bold text-[#4A3F35]">Does the returned saree pass inspection?</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setInspectVerdict("pass")}
+                    className={`rounded-lg border px-3 py-2.5 text-[11px] font-bold uppercase ${
+                      inspectVerdict === "pass"
+                        ? "border-green-500 bg-green-50 text-green-700"
+                        : "border-[#800020]/15 bg-white text-gray-500"
+                    }`}
+                  >
+                    <CheckCircle2 className="mr-1 inline h-3 w-3" /> Passed
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInspectVerdict("fail")}
+                    className={`rounded-lg border px-3 py-2.5 text-[11px] font-bold uppercase ${
+                      inspectVerdict === "fail"
+                        ? "border-red-400 bg-red-50 text-red-700"
+                        : "border-[#800020]/15 bg-white text-gray-500"
+                    }`}
+                  >
+                    <XCircle className="mr-1 inline h-3 w-3" /> Failed
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500">
+                  {inspectVerdict === "pass"
+                    ? "The replacement becomes shippable, and stock moves now."
+                    : "No replacement will ship. The customer is refunded the amount you set below, and the returned saree is NOT put back on sale."}
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between rounded-lg bg-[#FAF8F6] px-3 py-2 text-[11px]">
+                <span className="font-bold uppercase tracking-wider text-gray-500">Quoted</span>
+                <span className="font-bold text-[#4A3F35]">{formatMoney(inspectRow.refund_quoted_amount ?? inspectRow.estimated_refund_amount)}</span>
+              </div>
+            )}
 
-            <label className="grid gap-1.5 text-[11px] font-bold text-[#4A3F35]">
-              Amount to refund
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                max={inspectRow.refund_quoted_amount || undefined}
-                value={inspectForm.inspected_amount}
-                onChange={(event) => setInspectForm((current) => ({ ...current, inspected_amount: event.target.value }))}
-                className="w-full rounded-lg border border-[#800020]/15 bg-[#FFFAF1] px-3 py-2.5 font-normal text-[#4A3F35] outline-none"
-              />
-              <span className="font-normal text-gray-400">An inspection can only lower the refund, never raise it.</span>
-            </label>
+            {(type !== "exchange" || inspectVerdict === "fail") && (
+              <label className="grid gap-1.5 text-[11px] font-bold text-[#4A3F35]">
+                Amount to refund
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  // The same cap the server enforces: an exchange refund cannot exceed what
+                  // was paid for the goods, a return's cannot exceed its quote.
+                  max={(type === "exchange" ? inspectRow.item_amount : inspectRow.refund_quoted_amount) || undefined}
+                  value={inspectForm.inspected_amount}
+                  onChange={(event) => setInspectForm((current) => ({ ...current, inspected_amount: event.target.value }))}
+                  className="w-full rounded-lg border border-[#800020]/15 bg-[#FFFAF1] px-3 py-2.5 font-normal text-[#4A3F35] outline-none"
+                />
+                <span className="font-normal text-gray-400">
+                  {type === "exchange"
+                    ? "Your decision — capped at what the customer paid for the item(s). Prepaid goes back to the original payment; COD asks them for a bank account or UPI id."
+                    : "An inspection can only lower the refund, never raise it."}
+                </span>
+              </label>
+            )}
 
             <label className="grid gap-1.5 text-[11px] font-bold text-[#4A3F35]">
               Reason <em className="not-italic font-normal text-amber-700">— shown to the customer</em>
@@ -530,7 +642,11 @@ export default function OrderActions({ type = "return" }) {
                 placeholder="e.g. Saree returned with a tear near the pallu."
                 className="w-full rounded-lg border border-[#800020]/15 bg-[#FFFAF1] px-3 py-2.5 font-normal text-[#4A3F35] outline-none"
               />
-              <span className="font-normal text-gray-400">Required whenever the amount is below the quote.</span>
+              <span className="font-normal text-gray-400">
+                {type === "exchange"
+                  ? "Required when refusing — the customer is shown it verbatim, with the photos."
+                  : "Required whenever the amount is below the quote."}
+              </span>
             </label>
 
             <div className="grid gap-1.5 text-[11px] font-bold text-[#4A3F35]">

@@ -87,14 +87,8 @@ export default function Orders() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [refundForm, setRefundForm] = useState({ refund_status: "Refund Paid", refund_payment_reference: "", refund_note: "" });
   const [savingRefund, setSavingRefund] = useState(false);
-  // Post-inspection adjustment. Applies to prepaid and COD alike — only the BANK DETAILS
-  // block below is COD-only, because a prepaid refund goes back to the original method.
-  const [inspectForm, setInspectForm] = useState({ inspected_amount: "", inspection_note: "" });
-  const [savingInspection, setSavingInspection] = useState(false);
-  // Two photo sets, deliberately not one: what the inspection found, and the receipt for the
-  // money afterwards. The customer sees them under separate headings.
-  const [inspectionImages, setInspectionImages] = useState([]);
-  const [uploadingInspection, setUploadingInspection] = useState(false);
+  // Only the transfer receipt now. The inspection and its damage photos moved to the Returns
+  // and Exchanges tabs, which own those flows end to end.
   const [proofImages, setProofImages] = useState([]);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [savingStatusId, setSavingStatusId] = useState(null);
@@ -132,21 +126,29 @@ export default function Orders() {
     loadOrders();
   };
 
+  /**
+   * The refund this page is responsible for: one with NO item action behind it.
+   *
+   * Returns and exchanges are settled end-to-end in their own tabs, which is where the
+   * inspection, the verdict and the payout belong. What never reaches those queues — because
+   * both are built from `order_item_actions` — is a refund that has no action at all:
+   * a whole-order cancellation (`full_cancel`) or an RTO. This page is the only place those
+   * can be settled, and that is now the only thing it does.
+   */
+  const standaloneRefundOf = (order) => (Array.isArray(order?.refunds) ? order.refunds : [])
+    .find((refund) => !refund.order_item_action_id) || null;
+
   const openRefundModal = (order) => {
-    setSelectedOrder(order);
+    const refund = standaloneRefundOf(order);
+    if (!refund) return;
+    // The specific row, not the order's "latest" — see the refund_id note in savePayment.
+    setSelectedOrder({ ...order, _refund: refund });
     setRefundForm({
-      refund_status: order.refund_status || "Refund Paid",
-      refund_payment_reference: order.refund_payment_reference || "",
-      refund_note: order.refund_note || "",
+      refund_status: refund.status || "Refund Paid",
+      refund_payment_reference: refund.gateway_refund_id || "",
+      refund_note: refund.note || "",
     });
-    // Pre-filled with whatever the inspection already concluded, else the quoted amount, so
-    // the common case (nothing wrong with the return) is one click.
-    setInspectForm({
-      inspected_amount: String(order.refund_inspected_amount ?? order.refund_amount ?? ""),
-      inspection_note: order.refund_inspection_note || "",
-    });
-    setInspectionImages(Array.isArray(order.refund_inspection_images) ? order.refund_inspection_images : []);
-    setProofImages(Array.isArray(order.refund_proof_images) ? order.refund_proof_images : []);
+    setProofImages(Array.isArray(refund.proof_images) ? refund.proof_images : []);
   };
 
   /**
@@ -173,20 +175,6 @@ export default function Orders() {
     }));
   };
 
-  // What the inspection found — the tear, the missing zari, the wrong colour.
-  const uploadInspectionImages = async (fileList) => {
-    setUploadingInspection(true);
-    setError("");
-    try {
-      const uploaded = await uploadImages(fileList);
-      setInspectionImages((current) => [...current, ...uploaded].slice(0, 4));
-    } catch (err) {
-      setError(err.message || "Upload failed.");
-    } finally {
-      setUploadingInspection(false);
-    }
-  };
-
   // The transfer screenshot / NEFT receipt.
   const uploadProof = async (fileList) => {
     setUploadingProof(true);
@@ -202,33 +190,14 @@ export default function Orders() {
   };
 
   /**
-   * Record the inspection. Separate from "save refund" on purpose: deciding what the customer
-   * is owed and confirming the money left are two different acts, often days apart, and the
-   * server refuses to change the amount once it has been paid.
+   * The inspection form has MOVED to the Returns and Exchanges tabs.
+   *
+   * It never belonged here: an inspection is the act of opening a returned parcel, which only
+   * happens on a return or an exchange — and both of those are now driven end-to-end from
+   * their own queue, where the verdict, the amount and the payout sit on one row. The refunds
+   * this page still settles (a cancellation, an RTO) have no parcel to inspect, so the form
+   * had nothing to act on and only offered a second, divergent path to the same endpoint.
    */
-  const saveInspection = async () => {
-    if (!selectedOrder?.refund_id) return;
-    setSavingInspection(true);
-    setError("");
-    try {
-      const response = await fetch(`${API_ENDPOINTS.orders}/refunds/${selectedOrder.refund_id}/inspection`, {
-        method: "PATCH",
-        headers: authHeaders(),
-        body: JSON.stringify({
-          inspected_amount: Number(inspectForm.inspected_amount),
-          inspection_note: inspectForm.inspection_note,
-          inspection_images: inspectionImages,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Unable to record the inspection.");
-      await loadOrders();
-    } catch (err) {
-      setError(err.message || "Unable to record the inspection.");
-    } finally {
-      setSavingInspection(false);
-    }
-  };
 
   const saveRefundStatus = async (event) => {
     event.preventDefault();
@@ -240,8 +209,14 @@ export default function Orders() {
         method: "PATCH",
         headers: authHeaders(),
         // Proof rides along with the status change — the moment it is marked paid is exactly
-        // when the receipt exists.
-        body: JSON.stringify({ ...refundForm, proof_images: proofImages }),
+        // when the receipt exists. `refund_id` names the cancellation/RTO row this modal
+        // opened, so an order that ALSO carries a return refund cannot have the wrong one
+        // settled by date order.
+        body: JSON.stringify({
+          refund_id: selectedOrder._refund?.id,
+          ...refundForm,
+          proof_images: proofImages,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Unable to update refund status.");
@@ -388,14 +363,29 @@ export default function Orders() {
                       <div className="font-semibold text-[#4A3F35]">{order.refund_status || "-"}</div>
                       {order.refund_amount > 0 && <div className="text-[10px] text-gray-400">{formatMoney(order.refund_amount)}</div>}
                     </td>
+                    {/* Only where this page is the right tool. It used to render on EVERY
+                        row: on an order with no refund at all it opened a form that could
+                        only answer "No refund record found", and on a return or exchange it
+                        offered a second, weaker path to a job the tabs now do properly. */}
                     <td className="px-5 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => openRefundModal(order)}
-                        className="rounded border border-[#800020]/20 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#800020]"
-                      >
-                        Refund
-                      </button>
+                      {standaloneRefundOf(order) ? (
+                        <button
+                          type="button"
+                          onClick={() => openRefundModal(order)}
+                          className="rounded border border-[#800020]/20 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#800020]"
+                        >
+                          Refund
+                        </button>
+                      ) : (
+                        <span
+                          className="text-[10px] text-gray-400"
+                          title={actionCounts.return || actionCounts.exchange
+                            ? "Settled from the Returns or Exchanges tab"
+                            : "No refund on this order"}
+                        >
+                          {actionCounts.return || actionCounts.exchange ? "In queue" : "-"}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -428,75 +418,6 @@ export default function Orders() {
                     <span>{selectedOrder.refund_bank_details.bank_name} · {selectedOrder.refund_bank_details.ifsc_code}</span>
                     <span>Account ending {selectedOrder.refund_bank_details.account_number_last4}</span>
                   </>
-                )}
-              </div>
-            )}
-            {/* ── Inspection ──────────────────────────────────────────────────────────────
-                Prepaid and COD both. Saved on its own button, not with the form below: the
-                server refuses to change the amount once the refund is marked paid, so the
-                two steps are deliberately not one. */}
-            {selectedOrder.refund_id && (
-              <div className="orders-inspect-block">
-                <p className="orders-inspect-head">
-                  After inspection
-                  <span>Quoted {formatMoney(selectedOrder.refund_amount)}</span>
-                </p>
-                <label>
-                  Amount to refund
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    max={selectedOrder.refund_amount || undefined}
-                    value={inspectForm.inspected_amount}
-                    onChange={(event) => setInspectForm((current) => ({ ...current, inspected_amount: event.target.value }))}
-                    disabled={Boolean(selectedOrder.refund_processed_at)}
-                  />
-                </label>
-                <label>
-                  Reason — <em>shown to the customer</em>
-                  <textarea
-                    rows={2}
-                    value={inspectForm.inspection_note}
-                    onChange={(event) => setInspectForm((current) => ({ ...current, inspection_note: event.target.value }))}
-                    placeholder="e.g. Saree returned with a tear near the pallu."
-                    disabled={Boolean(selectedOrder.refund_processed_at)}
-                  />
-                </label>
-                {/* The damage itself. A written reason alone is one party's word against the
-                    other's; the photo is what makes a reduced refund arguable rather than
-                    arbitrary. Stored apart from the transfer receipt below. */}
-                <label>
-                  Photos of the damage — <em>shown to the customer</em>
-                  <div className="orders-proof-row">
-                    {inspectionImages.map((image, index) => (
-                      <span className="orders-proof-thumb" key={`${image.url}-${index}`}>
-                        <img src={image.url} alt="" />
-                        {!selectedOrder.refund_processed_at && (
-                          <button
-                            type="button"
-                            onClick={() => setInspectionImages((current) => current.filter((_, i) => i !== index))}
-                            aria-label="Remove"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </span>
-                    ))}
-                    {inspectionImages.length < 4 && !selectedOrder.refund_processed_at && (
-                      <label className="orders-proof-add">
-                        {uploadingInspection ? "Uploading…" : "+ Add"}
-                        <input type="file" accept="image/*" multiple hidden onChange={(event) => uploadInspectionImages(event.target.files)} />
-                      </label>
-                    )}
-                  </div>
-                </label>
-                {selectedOrder.refund_processed_at ? (
-                  <p className="orders-inspect-locked">Already paid — the amount can no longer be changed.</p>
-                ) : (
-                  <button type="button" onClick={saveInspection} disabled={savingInspection}>
-                    {savingInspection ? "Saving…" : "Record inspection"}
-                  </button>
                 )}
               </div>
             )}
